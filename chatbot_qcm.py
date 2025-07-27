@@ -27,11 +27,13 @@ chapitre_choisi = st.selectbox("📘 Chapitre :", chapitres)
 
 if st.button("🎲 Générer une question"):
     with st.spinner("GPT prépare une question adaptée..."):
-        # Prompt personnalisé
-        prompt = f"""
-Tu es un professeur de mathématiques. Crée une question de QCM conforme au programme de mathématiques spécifiques de Première (enseignement commun). Chapitre : {chapitre_choisi}.
+        chapitre_choisi = chapitre_choisi or "Fonctions"
 
-Présente la question dans ce format JSON :
+        # ✅ Définir le prompt ici, juste avant l'appel à l'API
+        prompt = f"""
+Tu es un professeur de mathematiques. Cree une question de QCM conforme au programme de mathematiques specifiques de Premiere (enseignement commun). Chapitre : {chapitre_choisi}.
+
+Presente la question dans ce format JSON :
 {{
   "chapitre": "{chapitre_choisi}",
   "question": "...",
@@ -39,32 +41,30 @@ Présente la question dans ce format JSON :
   "bonne_reponse": "A",
   "explication": "..."
 }}
-        """
+"""
 
-try:
-    # Appel API OpenAI avec la nouvelle méthode
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7
-    )
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
 
-    content = response.choices[0].message.content
-    qcm_json = json.loads(content)
+            content = response.choices[0].message.content
+            qcm_json = json.loads(content)
 
-    st.subheader("❓ Question")
-    st.write(qcm_json["question"])
+            st.subheader("❓ Question")
+            st.write(qcm_json["question"])
 
-    choix = st.radio("Réponses :", qcm_json["propositions"], key="choix")
+            choix = st.radio("Réponses :", qcm_json["propositions"], key="choix")
 
-    if st.button("✅ Valider ma réponse"):
-        if choix.startswith(qcm_json["bonne_reponse"]):
-            st.success("Bonne réponse ! 🎉")
-        else:
-            st.error(f"Mauvaise réponse. La bonne était : {qcm_json['bonne_reponse']}")
-        st.info("🧠 Explication : " + qcm_json["explication"])
+            if st.button("✅ Valider ma réponse"):
+                if choix.startswith(qcm_json["bonne_reponse"]):
+                    st.success("Bonne réponse ! 🎉")
+                else:
+                    st.error(f"Mauvaise réponse. La bonne était : {qcm_json['bonne_reponse']}")
+                st.info("🧠 Explication : " + qcm_json["explication"])
 
-except Exception as e:
-    st.error("❌ Une erreur est survenue lors de la génération du QCM.")
-    st.exception(e)
-            # Appel API OpenAI avec la nouvelle méthode
+        except Exception as e:
+            st.error("❌ Une erreur est survenue lors de la génération du QCM.")
+            st.exception(e)
