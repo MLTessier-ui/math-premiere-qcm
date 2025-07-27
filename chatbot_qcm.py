@@ -65,23 +65,30 @@ Réponds dans ce format JSON structuré :""",
 
         prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
 
-        try:
+                try:
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",  # ou "gpt-4" si tu y as accès
+                model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7
             )
 
-            # Extraction et affichage
             content = response.choices[0].message.content
+
+            # Tente de parser le JSON généré
             data = json.loads(content)
 
-            st.markdown(f"### ❓ {data['question']}")
-            for letter, option in data["options"].items():
-                st.markdown(f"- **{letter}** : {option}")
+            st.markdown(f"### ❓ Question :\n{data['question']}")
+            options = data["options"]
 
-            st.markdown(f"✅ **Bonne réponse** : {data['correct_answer']}")
-            st.markdown(f"📚 **Explication** : {data['explanation']}")
+            # Affiche les boutons pour chaque réponse
+            user_answer = st.radio("Choisis ta réponse :", list(options.keys()), format_func=lambda x: f"{x} : {options[x]}")
+
+            if user_answer:
+                if user_answer == data["correct_answer"]:
+                    st.success("✅ Bonne réponse !")
+                else:
+                    st.error(f"❌ Mauvaise réponse. La bonne réponse était {data['correct_answer']} : {options[data['correct_answer']]}")
+                st.markdown(f"**Explication** : {data['explanation']}")
 
         except Exception as e:
             st.error(f"❌ Une erreur est survenue : {e}")
