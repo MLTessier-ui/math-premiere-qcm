@@ -4,6 +4,16 @@ import streamlit as st
 import json
 import openai
 
+import sys
+
+key = st.secrets["OPENAI_API_KEY"]
+
+try:
+    key.encode("ascii")
+except UnicodeEncodeError:
+    st.error("❌ La clé API contient un caractère accentué ou invisible. Veuillez en recréer une.")
+    sys.exit()
+
 # Initialisation du client OpenAI avec la clé depuis les secrets
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
