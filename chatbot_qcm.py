@@ -60,7 +60,7 @@ Réponds en JSON comme ceci :
   }},
   "correct_answer": "B",
   "explanation": "..."
-}}"""
+}}""",
     }
 
     try:
@@ -72,22 +72,39 @@ Réponds en JSON comme ceci :
 
         qcm_raw = json.loads(response.choices[0].message.content)
 
-        # 🔀 Mélange des options
-        original_options = qcm_raw["options"]
+        # Supprime les réponses dupliquées
+        seen = set()
+        unique_options = {}
+        for key, val in qcm_raw["options"].items():
+            if val not in seen:
+                unique_options[key] = val
+                seen.add(val)
+
+        # Vérifie qu'on a bien 4 options uniques
+        if len(unique_options) < 4:
+            st.error("❌ La question générée contient des réponses identiques. Essaie à nouveau.")
+            st.session_state.qcm_data = None
+            st.stop()
+
+        # Mélange proprement les options
+        original_options = unique_options
         original_correct_text = original_options[qcm_raw["correct_answer"]]
 
+        # Mélange les items
         items = list(original_options.items())
         random.shuffle(items)
 
+        # Reconstitue les nouvelles options avec de nouvelles lettres
         new_letters = ["A", "B", "C", "D"]
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
 
+        # Trouve la nouvelle lettre correspondant à la bonne réponse
         for new_letter, text in shuffled_options.items():
             if text == original_correct_text:
                 correct_letter = new_letter
                 break
 
-        # Stockage
+        # Enregistre dans l'état
         st.session_state.qcm_data = {
             "question": qcm_raw["question"],
             "options": shuffled_options,
@@ -99,7 +116,7 @@ Réponds en JSON comme ceci :
         st.error(f"❌ Erreur GPT : {e}")
         st.session_state.qcm_data = None
 
-# Affichage de la question
+# Affichage de la question si elle existe
 if st.session_state.qcm_data:
     q = st.session_state.qcm_data
 
@@ -114,7 +131,7 @@ if st.session_state.qcm_data:
     if st.button("✅ Valider ma réponse"):
         st.session_state.answer_submitted = True
 
-# Feedback
+# Affichage du feedback
 if st.session_state.answer_submitted and st.session_state.user_answer:
     q = st.session_state.qcm_data
     if st.session_state.user_answer == q["correct_answer"]:
