@@ -40,54 +40,29 @@ if st.button("🎲 Générer une question"):
         chapitre_choisi = chapitre_choisi or "Fonctions"
 
         # ✅ Définir le prompt ici, juste avant l'appel à l'API
-        prompt = f"""
-Tu es un professeur de mathématiques. Génére une question de type QCM pour le niveau Première - Mathématiques spécifiques (anciennement appelé "Maths expertes"). 
+# Génération propre du prompt
+prompt_data = {
+    "instructions": f"""Tu es un professeur de mathématiques. Génére une question de type QCM pour le niveau Première - Mathématiques spécifiques.
 
-- Le thème est : [insérer ici le chapitre choisi, par exemple "Fonctions", "Suites", etc.].
+- Le thème est : {theme}
 - Rédige une question claire.
 - Donne 4 propositions (A, B, C, D), dont une seule est correcte.
 - Mélange aléatoirement l'ordre des propositions.
 - Indique la lettre de la bonne réponse.
 - Donne une explication claire et pédagogique pour justifier la bonne réponse, même si l'élève s’est trompé.
 
-Réponds dans ce format JSON structuré :
-
-{
-  "question": "...",
-  "options": {
-    "A": "...",
-    "B": "...",
-    "C": "...",
-    "D": "..."
-  },
-  "correct_answer": "B",
-  "explanation": "..."
+Réponds dans ce format JSON structuré :""",
+    "json_format": {
+        "question": "...",
+        "options": {
+            "A": "...",
+            "B": "...",
+            "C": "...",
+            "D": "..."
+        },
+        "correct_answer": "B",
+        "explanation": "..."
+    }
 }
 
-"""
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-
-            content = response.choices[0].message.content
-            qcm_json = json.loads(content)
-
-            st.subheader("❓ Question")
-            st.write(qcm_json["question"])
-
-            choix = st.radio("Réponses :", qcm_json["propositions"], key="choix")
-
-            if st.button("✅ Valider ma réponse"):
-                if choix.startswith(qcm_json["bonne_reponse"]):
-                    st.success("Bonne réponse ! 🎉")
-                else:
-                    st.error(f"Mauvaise réponse. La bonne était : {qcm_json['bonne_reponse']}")
-                st.info("🧠 Explication : " + qcm_json["explication"])
-
-        except Exception as e:
-            st.error("❌ Une erreur est survenue lors de la génération du QCM.")
-            st.exception(e)
+prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
