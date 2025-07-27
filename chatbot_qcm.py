@@ -72,12 +72,24 @@ Réponds en JSON comme ceci :
 
         qcm_raw = json.loads(response.choices[0].message.content)
 
-        # Mélange des options localement pour éviter les doublons
-        items = list(qcm_raw["options"].items())
-        random.shuffle(items)
-        shuffled_options = {letter: text for letter, text in zip(["A", "B", "C", "D"], [t[1] for t in items])}
-        correct_index = [t[1] for t in items].index(qcm_raw["options"][qcm_raw["correct_answer"]])
-        correct_letter = ["A", "B", "C", "D"][correct_index]
+      # Mélange local pour éviter les doublons tout en gardant la bonne réponse
+      original_options = qcm_raw["options"]
+      original_correct_text = original_options[qcm_raw["correct_answer"]]
+
+      # Mélange les items
+      items = list(original_options.items())
+      random.shuffle(items)
+
+      # Reconstitue les nouvelles options avec de nouvelles lettres
+      new_letters = ["A", "B", "C", "D"]
+      shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
+
+      # Trouve la nouvelle lettre correspondant à la bonne réponse
+       for new_letter, text in shuffled_options.items():
+           if text == original_correct_text:
+               correct_letter = new_letter
+               break
+
 
         st.session_state.qcm_data = {
             "question": qcm_raw["question"],
