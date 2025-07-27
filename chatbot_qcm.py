@@ -9,14 +9,14 @@ st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
 st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
 st.markdown("Choisis un chapitre pour générer une question de QCM adaptée au programme.")
 
-# Liste de chapitres disponibles
+# Liste de chapitres
 chapitres = [
     "Fonctions", "Dérivation", "Statistiques", "Suites",
     "Trigonométrie", "Probabilités", "Géométrie", "Nombres et calculs", "Grandeurs et mesures"
 ]
 chapitre_choisi = st.selectbox("📘 Chapitre :", chapitres)
 
-# Vérification API key
+# Vérification de la clé API
 try:
     key = st.secrets["OPENAI_API_KEY"]
     key.encode("ascii")
@@ -39,17 +39,15 @@ if st.button("🎲 Générer une question"):
     st.session_state.answer_submitted = False
     st.session_state.user_answer = None
 
-    prompt_data = {
-        "instructions": f"""Tu es un professeur de mathématiques. Génère une question QCM niveau Première.
+    prompt = f"""
+Tu es un professeur de mathématiques en Première. Génère une question QCM sur le chapitre : {chapitre_choisi}.
+- Donne UNE question claire.
+- Propose 4 réponses DIFFÉRENTES (A, B, C, D).
+- Une SEULE bonne réponse (ex: "C").
+- Indique le champ "correct_answer": "lettre", et donne une explication dans "explanation".
+- Réponds uniquement en JSON (pas de phrases ou d'intro).
 
-- Le chapitre est : {chapitre_choisi}
-- Fournis UNE question claire.
-- Propose 4 réponses DIFFÉRENTES.
-- Donne UNE seule bonne réponse (ex: 'B').
-- Donne une explication pédagogique.
-- Ne commence pas par "Voici une question...".
-
-Réponds en JSON comme ceci :
+Format :
 {{
   "question": "...",
   "options": {{
@@ -60,51 +58,47 @@ Réponds en JSON comme ceci :
   }},
   "correct_answer": "B",
   "explanation": "..."
-}}""",
-    }
+}}
+"""
 
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt_data["instructions"]}],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
 
         qcm_raw = json.loads(response.choices[0].message.content)
 
-        # Supprime les réponses dupliquées
-        seen = set()
-        unique_options = {}
-        for key, val in qcm_raw["options"].items():
-            if val not in seen:
-                unique_options[key] = val
-                seen.add(val)
-
-        # Vérifie qu'on a bien 4 options uniques
-        if len(unique_options) < 4:
-            st.error("❌ La question générée contient des réponses identiques. Essaie à nouveau.")
-            st.session_state.qcm_data = None
+        # Vérifie que toutes les options sont uniques
+        options_text = list(qcm_raw["options"].values())
+        if len(set(options_text)) < 4:
+            st.error("❌ Certaines réponses sont identiques. Réessaie.")
             st.stop()
 
-        # Mélange proprement les options
-        original_options = unique_options
-        original_correct_text = original_options[qcm_raw["correct_answer"]]
+        # Vérifie que la bonne réponse est bien dans les options
+        correct_text = qcm_raw["options"][qcm_raw["correct_answer"]]
+        if correct_text not in options_text:
+            st.error("❌ La bonne réponse n’est pas dans les propositions. Réessaie.")
+            st.stop()
 
-        # Mélange les items
-        items = list(original_options.items())
+        # Mélange les options tout en retrouvant la bonne lettre
+        items = list(qcm_raw["options"].items())
         random.shuffle(items)
 
-        # Reconstitue les nouvelles options avec de nouvelles lettres
         new_letters = ["A", "B", "C", "D"]
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
 
-        # Trouve la nouvelle lettre correspondant à la bonne réponse
-        for new_letter, text in shuffled_options.items():
-            if text == original_correct_text:
-                correct_letter = new_letter
-                break
+        # Retrouve la nouvelle lettre de la bonne réponse
+        correct_letter = next(
+            (letter for letter, text in shuffled_options.items() if text == correct_text), None
+        )
 
-        # Enregistre dans l'état
+        if correct_letter is None:
+            st.error("❌ Erreur interne : impossible de retrouver la bonne réponse.")
+            st.stop()
+
+        # Sauvegarde des données
         st.session_state.qcm_data = {
             "question": qcm_raw["question"],
             "options": shuffled_options,
@@ -116,14 +110,13 @@ Réponds en JSON comme ceci :
         st.error(f"❌ Erreur GPT : {e}")
         st.session_state.qcm_data = None
 
-# Affichage de la question si elle existe
+# Affichage de la question si disponible
 if st.session_state.qcm_data:
     q = st.session_state.qcm_data
-
     st.markdown(f"**❓ Question :** {q['question']}")
 
     st.session_state.user_answer = st.radio(
-        "Choisis ta réponse :", 
+        "Choisis ta réponse :",
         list(q["options"].keys()),
         format_func=lambda k: f"{k} : {q['options'][k]}"
     )
@@ -131,12 +124,13 @@ if st.session_state.qcm_data:
     if st.button("✅ Valider ma réponse"):
         st.session_state.answer_submitted = True
 
-# Affichage du feedback
+# Feedback
 if st.session_state.answer_submitted and st.session_state.user_answer:
     q = st.session_state.qcm_data
-    if st.session_state.user_answer == q["correct_answer"]:
+    user = st.session_state.user_answer
+    correct = q["correct_answer"]
+    if user == correct:
         st.success("✅ Bravo, c'est la bonne réponse !")
     else:
-        bonne = q["correct_answer"]
-        st.error(f"❌ Mauvais choix. La bonne réponse était **{bonne} : {q['options'][bonne]}**")
+        st.error(f"❌ Mauvais choix. La bonne réponse était **{correct} : {q['options'][correct]}**")
     st.markdown(f"**💡 Explication :** {q['explanation']}")
