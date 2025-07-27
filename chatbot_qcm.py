@@ -39,5 +39,30 @@ Présente la question dans ce format JSON :
 }}
         """
 
-        try:
+try:
+    # Appel API OpenAI avec la nouvelle méthode
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7
+    )
+
+    content = response.choices[0].message.content
+    qcm_json = json.loads(content)
+
+    st.subheader("❓ Question")
+    st.write(qcm_json["question"])
+
+    choix = st.radio("Réponses :", qcm_json["propositions"], key="choix")
+
+    if st.button("✅ Valider ma réponse"):
+        if choix.startswith(qcm_json["bonne_reponse"]):
+            st.success("Bonne réponse ! 🎉")
+        else:
+            st.error(f"Mauvaise réponse. La bonne était : {qcm_json['bonne_reponse']}")
+        st.info("🧠 Explication : " + qcm_json["explication"])
+
+except Exception as e:
+    st.error("❌ Une erreur est survenue lors de la génération du QCM.")
+    st.exception(e)
             # Appel API OpenAI avec la nouvelle méthode
