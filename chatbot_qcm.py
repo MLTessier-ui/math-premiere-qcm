@@ -82,12 +82,15 @@ Réponds dans ce format JSON structuré :""",
 
             user_answer = st.radio("Choisis ta réponse :", list(options.keys()), format_func=lambda x: f"{x} : {options[x]}")
 
-            if user_answer:
-                if user_answer == data["correct_answer"]:
-                    st.success("✅ Bonne réponse !")
-                else:
-                    st.error(f"❌ Mauvaise réponse. La bonne réponse était {data['correct_answer']} : {options[data['correct_answer']]}")
-                st.markdown(f"**Explication** : {data['explanation']}")
+            user_answer = st.radio("Choisis ta réponse :", list(options.keys()), format_func=lambda x: f"{x} : {options[x]}", key="qcm_radio")
+
+if st.button("✅ Valider ma réponse"):
+    if user_answer == data["correct_answer"]:
+        st.success("✅ Bonne réponse !")
+    else:
+        st.error(f"❌ Mauvaise réponse. La bonne réponse était {data['correct_answer']} : {options[data['correct_answer']]}")
+    st.markdown(f"**Explication** : {data['explanation']}")
+
 
         except Exception as e:
             st.error(f"❌ Une erreur est survenue : {e}")
