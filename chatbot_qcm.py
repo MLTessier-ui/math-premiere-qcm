@@ -37,16 +37,16 @@ Présente la question dans ce format JSON :
   "explication": "..."
 }}
         """
+client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
-        )
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.7
+)
 
-        # Afficher et traiter le résultat
-        try:
-            qcm_json = json.loads(response['choices'][0]['message']['content'])
+qcm_json = json.loads(response.choices[0].message.content)
+
 
             st.subheader("📘 Question")
             st.write(qcm_json["question"])
