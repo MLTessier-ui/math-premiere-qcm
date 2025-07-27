@@ -41,16 +41,29 @@ if st.button("🎲 Générer une question"):
 
         # ✅ Définir le prompt ici, juste avant l'appel à l'API
         prompt = f"""
-Tu es un professeur de mathematiques. Cree une question de QCM conforme au programme de mathematiques specifiques de Premiere (enseignement commun). Chapitre : {chapitre_choisi}.
+Tu es un professeur de mathématiques. Génére une question de type QCM pour le niveau Première - Mathématiques spécifiques (anciennement appelé "Maths expertes"). 
 
-Presente la question dans ce format JSON :
-{{
-  "chapitre": "{chapitre_choisi}",
+- Le thème est : [insérer ici le chapitre choisi, par exemple "Fonctions", "Suites", etc.].
+- Rédige une question claire.
+- Donne 4 propositions (A, B, C, D), dont une seule est correcte.
+- Mélange aléatoirement l'ordre des propositions.
+- Indique la lettre de la bonne réponse.
+- Donne une explication claire et pédagogique pour justifier la bonne réponse, même si l'élève s’est trompé.
+
+Réponds dans ce format JSON structuré :
+
+{
   "question": "...",
-  "propositions": ["A. ...", "B. ...", "C. ...", "D. ..."],
-  "bonne_reponse": "A",
-  "explication": "..."
-}}
+  "options": {
+    "A": "...",
+    "B": "...",
+    "C": "...",
+    "D": "..."
+  },
+  "correct_answer": "B",
+  "explanation": "..."
+}
+
 """
 
         try:
