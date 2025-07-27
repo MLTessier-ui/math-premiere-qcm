@@ -3,7 +3,8 @@ import openai
 import json
 
 # Clé API OpenAI
-openai.api_key = "TON_API_KEY"
+# openai.api_key = "TON_API_KEY"
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Liste de chapitres possibles
 chapitres = [
