@@ -63,4 +63,4 @@ Réponds dans ce format JSON structuré :""",
             }
         }
 
-        prompt = prompt_da_
+prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
