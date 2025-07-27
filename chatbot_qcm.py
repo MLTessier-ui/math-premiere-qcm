@@ -63,4 +63,25 @@ Réponds dans ce format JSON structuré :""",
             }
         }
 
-prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
+        prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",  # ou "gpt-4" si tu y as accès
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+
+            # Extraction et affichage
+            content = response.choices[0].message.content
+            data = json.loads(content)
+
+            st.markdown(f"### ❓ {data['question']}")
+            for letter, option in data["options"].items():
+                st.markdown(f"- **{letter}** : {option}")
+
+            st.markdown(f"✅ **Bonne réponse** : {data['correct_answer']}")
+            st.markdown(f"📚 **Explication** : {data['explanation']}")
+
+        except Exception as e:
+            st.error(f"❌ Une erreur est survenue : {e}")
