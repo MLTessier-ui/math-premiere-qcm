@@ -2,28 +2,13 @@
 
 import json
 import openai
-import streamlit
+import streamlit as st
 import sys
 
-import streamlit as st
-
-# Liste de thèmes possibles
-themes = ["Fonctions", "Dérivation", "Statistiques", "Suites", "Trigonométrie"]
-
-# Interface utilisateur : choix du thème
-theme = st.selectbox("Choisis un thème :", themes)
-
-
-key = st.secrets["OPENAI_API_KEY"]
-
-try:
-    key.encode("ascii")
-except UnicodeEncodeError:
-    st.error("❌ La clé API contient un caractère accentué ou invisible. Veuillez en recréer une.")
-    sys.exit()
-
-# Initialisation du client OpenAI avec la clé depuis les secrets
-client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# Configuration de la page
+st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
+st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
+st.markdown("Choisis un chapitre pour générer une question de QCM adaptée au programme.")
 
 # Liste des chapitres du programme spécifique de Première
 chapitres = [
@@ -36,21 +21,28 @@ chapitres = [
     "Grandeurs et mesures"
 ]
 
-st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
-st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
-st.markdown("Choisis un chapitre pour générer une question de QCM adaptée au programme.")
-
 # Choix de chapitre
 chapitre_choisi = st.selectbox("📘 Chapitre :", chapitres)
 
+# Clé API
+try:
+    key = st.secrets["OPENAI_API_KEY"]
+    key.encode("ascii")
+except UnicodeEncodeError:
+    st.error("❌ La clé API contient un caractère accentué ou invisible. Veuillez en recréer une.")
+    sys.exit()
+
+# Initialisation du client OpenAI
+client = openai.OpenAI(api_key=key)
+
 if st.button("🎲 Générer une question"):
     with st.spinner("GPT prépare une question adaptée..."):
-        chapitre_choisi = chapitre_choisi or "Fonctions"
 
+        # Génération du prompt
         prompt_data = {
-            "instructions": f"""Tu es un professeur de mathématiques. Génère une question de type QCM pour le niveau Première - Mathématiques spécifiques.
+            "instructions": f"""Tu es un professeur de mathématiques. Génére une question de type QCM pour le niveau Première - Mathématiques spécifiques.
 
-- Le thème est : {theme}
+- Le thème est : {chapitre_choisi}
 - Rédige une question claire.
 - Donne 4 propositions (A, B, C, D), dont une seule est correcte.
 - Mélange aléatoirement l'ordre des propositions.
@@ -71,27 +63,4 @@ Réponds dans ce format JSON structuré :""",
             }
         }
 
-        prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7
-            )
-
-            content = response.choices[0].message.content.strip()
-            qcm = json.loads(content)
-
-            # Affichage dans l'app
-            st.markdown(f"### ❓ Question :\n{qcm['question']}")
-            for key, value in qcm["options"].items():
-                st.markdown(f"**{key}** : {value}")
-
-            if "correct_answer" in qcm:
-                st.success(f"✅ Bonne réponse : {qcm['correct_answer']}")
-            if "explanation" in qcm:
-                st.info(f"ℹ️ Explication : {qcm['explanation']}")
-
-        except Exception as e:
-            st.error(f"❌ Erreur lors de l’appel à l’API : {str(e)}")
+        prompt = prompt_da_
