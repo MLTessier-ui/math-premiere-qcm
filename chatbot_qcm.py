@@ -5,13 +5,6 @@ import openai
 import streamlit
 import sys
 
-import streamlit as st
-
-# Liste de thèmes possibles
-themes = ["Fonctions", "Dérivation", "Statistiques", "Suites", "Trigonométrie"]
-
-# Interface utilisateur : choix du thème
-theme = st.selectbox("Choisis un thème :", themes)
 
 
 key = st.secrets["OPENAI_API_KEY"]
