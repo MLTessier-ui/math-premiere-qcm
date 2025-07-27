@@ -37,8 +37,8 @@ client = openai.OpenAI(api_key=key)
 
 if st.button("🎲 Générer une question"):
     with st.spinner("GPT prépare une question adaptée..."):
+        chapitre_choisi = chapitre_choisi or "Fonctions"
 
-        # Génération du prompt
         prompt_data = {
             "instructions": f"""Tu es un professeur de mathématiques. Génére une question de type QCM pour le niveau Première - Mathématiques spécifiques.
 
@@ -65,7 +65,7 @@ Réponds dans ce format JSON structuré :""",
 
         prompt = prompt_data["instructions"] + "\n\n" + json.dumps(prompt_data["json_format"], indent=2)
 
-                try:
+        try:
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
@@ -80,7 +80,6 @@ Réponds dans ce format JSON structuré :""",
             st.markdown(f"### ❓ Question :\n{data['question']}")
             options = data["options"]
 
-            # Affiche les boutons pour chaque réponse
             user_answer = st.radio("Choisis ta réponse :", list(options.keys()), format_func=lambda x: f"{x} : {options[x]}")
 
             if user_answer:
