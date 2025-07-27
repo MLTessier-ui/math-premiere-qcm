@@ -7,7 +7,6 @@ import sys
 
 
 
-key = st.secrets["OPENAI_API_KEY"]
 
 try:
     key.encode("ascii")
