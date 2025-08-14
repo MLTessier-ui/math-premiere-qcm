@@ -10,10 +10,14 @@ import re
 st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
 st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
 
-# Choix du chapitre et paramètres
+# Thèmes limités selon l'annexe officielle
 chapitres = [
-    "Fonctions", "Dérivation", "Statistiques", "Suites",
-    "Trigonométrie", "Probabilités", "Géométrie", "Nombres et calculs", "Grandeurs et mesures"
+    "Calcul numérique et algébrique",
+    "Proportions et pourcentages",
+    "Évolutions et variations",
+    "Fonctions et représentations",
+    "Statistiques",
+    "Probabilités"
 ]
 chapitre_choisi = st.selectbox("📘 Chapitre :", chapitres)
 nb_questions = st.slider("Nombre de questions", 5, 20, 10)
@@ -50,15 +54,16 @@ st.session_state.max_questions = nb_questions
 
 # Fonction de génération sécurisée
 def generate_unique_qcm():
-    prompt_data = f"""Tu es un professeur de mathématiques. Génère une question QCM niveau Première.
+    prompt_data = f"""Tu es un professeur de mathématiques.
+Génère une question QCM niveau Première (enseignement spécifique) en respectant STRICTEMENT le thème suivant : {chapitre_choisi}.
+Ne pose pas de questions hors du cadre des automatismes listés dans le programme officiel pour ce thème.
+Difficulté : {difficulte}.
 
-- Chapitre : {chapitre_choisi}
-- Difficulté : {difficulte}
-- Fournis UNE question claire.
+- Fournis UNE question claire et concise.
 - Propose 4 réponses DIFFÉRENTES.
 - Donne UNE seule bonne réponse (ex: 'B').
-- Donne une explication pédagogique.
-- Réponds STRICTEMENT en JSON valide (avec guillemets doubles pour les clés et les valeurs) et rien d'autre.
+- Donne une explication pédagogique courte.
+- Réponds STRICTEMENT en JSON valide avec guillemets doubles pour clés et valeurs.
 {{
   "question": "...",
   "options": {{
