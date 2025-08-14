@@ -26,15 +26,13 @@ try:
     key.encode("ascii")
 except (KeyError, UnicodeEncodeError):
     st.error("❌ Clé API invalide ou manquante.")
-    sys.exit()
+    st.stop()
 
 client = openai.OpenAI(api_key=key)
 
 # Initialisation de session_state
 if "qcm_data" not in st.session_state:
     st.session_state.qcm_data = None
-if "answer_submitted" not in st.session_state:
-    st.session_state.answer_submitted = False
 if "user_answer" not in st.session_state:
     st.session_state.user_answer = None
 if "score" not in st.session_state:
@@ -86,7 +84,10 @@ def generate_unique_qcm():
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", content, re.S)
             if match:
-                qcm_raw = json.loads(match.group())
+                try:
+                    qcm_raw = json.loads(match.group())
+                except json.JSONDecodeError:
+                    return None
             else:
                 return None
 
@@ -101,16 +102,8 @@ def generate_unique_qcm():
         new_letters = ["A", "B", "C", "D"]
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
 
-        # Nouvelle lettre correcte
-        correct_letter = None
-        for old_letter, old_text in original_options.items():
-            if old_letter == qcm_raw["correct_answer"]:
-                correct_text = old_text
-                break
-        for new_letter, text in shuffled_options.items():
-            if text == correct_text:
-                correct_letter = new_letter
-                break
+        correct_text = original_options[qcm_raw["correct_answer"]]
+        correct_letter = next(letter for letter, text in shuffled_options.items() if text == correct_text)
 
         return {
             "question": qcm_raw["question"],
@@ -143,7 +136,6 @@ if st.session_state.qcm_data and st.session_state.nb_questions < st.session_stat
     )
 
     if st.button("✅ Valider ma réponse") and st.session_state.user_answer:
-        st.session_state.answer_submitted = True
         user_letter = st.session_state.user_answer
         correct_letter = q["correct_answer"]
         is_correct = user_letter == correct_letter
@@ -167,7 +159,7 @@ if st.session_state.qcm_data and st.session_state.nb_questions < st.session_stat
             st.session_state.score += 1
         st.session_state.nb_questions += 1
         st.session_state.qcm_data = None
-        st.experimental_rerun()
+        st.rerun()
 
 # Fin du quiz
 if st.session_state.nb_questions >= st.session_state.max_questions:
@@ -185,7 +177,6 @@ if st.session_state.nb_questions >= st.session_state.max_questions:
         st.session_state.score = 0
         st.session_state.nb_questions = 0
         st.session_state.qcm_data = None
-        st.session_state.answer_submitted = False
         st.session_state.answers_log.clear()
         st.session_state.seen_questions.clear()
-        st.experimental_rerun()
+        st.rerun()
