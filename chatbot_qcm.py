@@ -5,20 +5,25 @@ import openai
 import streamlit as st
 import sys
 import re
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
 
-# Configuration de la page
+# Configuration
 st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
 st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
 
-# Thèmes limités selon l'annexe officielle
-chapitres = [
-    "Calcul numérique et algébrique",
-    "Proportions et pourcentages",
-    "Évolutions et variations",
-    "Fonctions et représentations",
-    "Statistiques",
-    "Probabilités"
-]
+# Thèmes + automatismes officiels
+themes_automatismes = {
+    "Calcul numérique et algébrique": "Règles de calcul, priorités, puissances, factorisations simples, développements simples, identités remarquables.",
+    "Proportions et pourcentages": "Proportionnalité, échelles, pourcentages simples et successifs, variations relatives.",
+    "Évolutions et variations": "Augmentations, diminutions, taux d’évolution, variations composées.",
+    "Fonctions et représentations": "Lecture graphique, valeurs, antécédents, variations, extrema.",
+    "Statistiques": "Tableaux, diagrammes, moyennes, médianes, étendues.",
+    "Probabilités": "Expériences aléatoires simples, calculs de probabilités, événements contraires."
+}
+
+chapitres = list(themes_automatismes.keys())
 chapitre_choisi = st.selectbox("📘 Chapitre :", chapitres)
 nb_questions = st.slider("Nombre de questions", 5, 20, 10)
 difficulte = st.selectbox("Niveau de difficulté", ["Facile", "Moyen", "Difficile"])
@@ -34,29 +39,27 @@ except (KeyError, UnicodeEncodeError):
 
 client = openai.OpenAI(api_key=key)
 
-# Initialisation de session_state
-if "qcm_data" not in st.session_state:
-    st.session_state.qcm_data = None
-if "user_answer" not in st.session_state:
-    st.session_state.user_answer = None
-if "score" not in st.session_state:
-    st.session_state.score = 0
-if "nb_questions" not in st.session_state:
-    st.session_state.nb_questions = 0
-if "max_questions" not in st.session_state:
-    st.session_state.max_questions = nb_questions
-if "seen_questions" not in st.session_state:
-    st.session_state.seen_questions = set()
-if "answers_log" not in st.session_state:
-    st.session_state.answers_log = []
+# Init session
+for var, default in {
+    "qcm_data": None,
+    "user_answer": None,
+    "score": 0,
+    "nb_questions": 0,
+    "max_questions": nb_questions,
+    "seen_questions": set(),
+    "answers_log": []
+}.items():
+    if var not in st.session_state:
+        st.session_state[var] = default
 
 st.session_state.max_questions = nb_questions
 
-# Fonction de génération sécurisée
+# Génération avec vérification
 def generate_unique_qcm():
+    description_theme = themes_automatismes[chapitre_choisi]
     prompt_data = f"""Tu es un professeur de mathématiques.
-Génère une question QCM niveau Première (enseignement spécifique) en respectant STRICTEMENT le thème suivant : {chapitre_choisi}.
-Ne pose pas de questions hors du cadre des automatismes listés dans le programme officiel pour ce thème.
+Génère une question QCM niveau Première (enseignement spécifique) sur le thème suivant : {chapitre_choisi}.
+Les questions doivent respecter exclusivement les automatismes suivants : {description_theme}
 Difficulté : {difficulte}.
 
 - Fournis UNE question claire et concise.
@@ -96,11 +99,18 @@ Difficulté : {difficulte}.
             else:
                 return None
 
+        # Vérif doublon
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
+
+        # Vérif respect du thème
+        mots_cles = [mot.strip().lower() for mot in description_theme.replace(",", "").split()]
+        if not any(mot in qcm_raw["question"].lower() for mot in mots_cles):
+            return None
+
         st.session_state.seen_questions.add(qcm_raw["question"])
 
-        # Mélange des options
+        # Mélange options
         original_options = qcm_raw["options"]
         items = list(original_options.items())
         random.shuffle(items)
@@ -119,7 +129,26 @@ Difficulté : {difficulte}.
     except Exception:
         return None
 
-# Lancer une question si nécessaire
+# Fonction de sauvegarde CSV
+def save_results_to_csv():
+    filename = "resultats_qcm.csv"
+    new_data = {
+        "Chapitre": chapitre_choisi,
+        "Difficulté": difficulte,
+        "Score": st.session_state.score,
+        "Questions_totales": st.session_state.max_questions
+    }
+    df_new = pd.DataFrame([new_data])
+
+    if os.path.exists(filename):
+        df_old = pd.read_csv(filename)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
+
+    df_all.to_csv(filename, index=False)
+
+# Lancer question
 if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.session_state.max_questions):
     while True:
         qcm = generate_unique_qcm()
@@ -127,7 +156,7 @@ if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.sessi
             st.session_state.qcm_data = qcm
             break
 
-# Affichage de la question
+# Affichage
 if st.session_state.qcm_data and st.session_state.nb_questions < st.session_state.max_questions:
     q = st.session_state.qcm_data
     st.markdown(f"**❓ Question {st.session_state.nb_questions+1}/{st.session_state.max_questions} :** {q['question']}")
@@ -166,8 +195,10 @@ if st.session_state.qcm_data and st.session_state.nb_questions < st.session_stat
         st.session_state.qcm_data = None
         st.rerun()
 
-# Fin du quiz
+# Fin
 if st.session_state.nb_questions >= st.session_state.max_questions:
+    save_results_to_csv()
+
     st.success(f"🎉 Quiz terminé ! Tu as obtenu {st.session_state.score} / {st.session_state.max_questions} bonnes réponses.")
     if mode_examen:
         st.markdown("## 📄 Corrigé complet")
@@ -177,6 +208,44 @@ if st.session_state.nb_questions >= st.session_state.max_questions:
             st.markdown(f"Bonne réponse : {rep['bonne réponse']}")
             st.markdown(f"<span style='color:black;'>💡 {rep['explication']}</span>", unsafe_allow_html=True)
             st.markdown("---")
+
+    if os.path.exists("resultats_qcm.csv"):
+        st.markdown("## 📊 Historique des résultats")
+        df_hist = pd.read_csv("resultats_qcm.csv")
+        st.dataframe(df_hist)
+
+        # Graphique global
+        fig, ax = plt.subplots()
+        ax.plot(range(1, len(df_hist) + 1), df_hist["Score"], marker="o", label="Score")
+        ax.set_xlabel("Tentative")
+        ax.set_ylabel("Score")
+        ax.set_title("Évolution des scores")
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
+
+        # Graphique par chapitre colorisé
+        st.markdown("### 📈 Score moyen par chapitre")
+        moyennes = df_hist.groupby("Chapitre")["Score"].mean()
+
+        couleurs = []
+        for score in moyennes.values:
+            if score >= 0.8 * nb_questions:
+                couleurs.append("green")
+            elif score >= 0.5 * nb_questions:
+                couleurs.append("gold")
+            else:
+                couleurs.append("red")
+
+        fig2, ax2 = plt.subplots()
+        ax2.bar(moyennes.index, moyennes.values, color=couleurs)
+        ax2.set_ylabel("Score moyen")
+        ax2.set_title("Score moyen par chapitre")
+        plt.xticks(rotation=45, ha="right")
+        st.pyplot(fig2)
+
+        # Bouton téléchargement
+        st.download_button("📥 Télécharger l'historique", df_hist.to_csv(index=False), "resultats_qcm.csv")
 
     if st.button("🔁 Recommencer un nouveau quiz"):
         st.session_state.score = 0
