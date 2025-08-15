@@ -7,7 +7,6 @@ import sys
 import re
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
 
 # Configuration
 st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
@@ -106,7 +105,7 @@ Difficulté : {difficulte}.
         # Vérif respect du thème
         mots_cles = [mot.strip().lower() for mot in description_theme.replace(",", "").split()]
         if not any(mot in qcm_raw["question"].lower() for mot in mots_cles):
-            return None
+            return None  # question hors sujet → rejetée
 
         st.session_state.seen_questions.add(qcm_raw["question"])
 
@@ -197,6 +196,7 @@ if st.session_state.qcm_data and st.session_state.nb_questions < st.session_stat
 
 # Fin
 if st.session_state.nb_questions >= st.session_state.max_questions:
+    # Sauvegarde CSV
     save_results_to_csv()
 
     st.success(f"🎉 Quiz terminé ! Tu as obtenu {st.session_state.score} / {st.session_state.max_questions} bonnes réponses.")
@@ -209,32 +209,11 @@ if st.session_state.nb_questions >= st.session_state.max_questions:
             st.markdown(f"<span style='color:black;'>💡 {rep['explication']}</span>", unsafe_allow_html=True)
             st.markdown("---")
 
+    # Affichage historique
     if os.path.exists("resultats_qcm.csv"):
         st.markdown("## 📊 Historique des résultats")
         df_hist = pd.read_csv("resultats_qcm.csv")
         st.dataframe(df_hist)
-
-        # Graphique global
-        fig, ax = plt.subplots()
-        ax.plot(range(1, len(df_hist) + 1), df_hist["Score"], marker="o", label="Score")
-        ax.set_xlabel("Tentative")
-        ax.set_ylabel("Score")
-        ax.set_title("Évolution des scores")
-        ax.grid(True)
-        ax.legend()
-        st.pyplot(fig)
-
-        # Graphique par chapitre
-        st.markdown("### 📈 Progression par chapitre")
-        fig2, ax2 = plt.subplots()
-        moyennes = df_hist.groupby("Chapitre")["Score"].mean()
-        ax2.bar(moyennes.index, moyennes.values, color="skyblue")
-        ax2.set_ylabel("Score moyen")
-        ax2.set_title("Score moyen par chapitre")
-        plt.xticks(rotation=45, ha="right")
-        st.pyplot(fig2)
-
-        # Bouton téléchargement
         st.download_button("📥 Télécharger l'historique", df_hist.to_csv(index=False), "resultats_qcm.csv")
 
     if st.button("🔁 Recommencer un nouveau quiz"):
