@@ -224,21 +224,11 @@ if st.session_state.nb_questions >= st.session_state.max_questions:
         ax.legend()
         st.pyplot(fig)
 
-        # Graphique par chapitre colorisé
-        st.markdown("### 📈 Score moyen par chapitre")
-        moyennes = df_hist.groupby("Chapitre")["Score"].mean()
-
-        couleurs = []
-        for score in moyennes.values:
-            if score >= 0.8 * nb_questions:
-                couleurs.append("green")
-            elif score >= 0.5 * nb_questions:
-                couleurs.append("gold")
-            else:
-                couleurs.append("red")
-
+        # Graphique par chapitre
+        st.markdown("### 📈 Progression par chapitre")
         fig2, ax2 = plt.subplots()
-        ax2.bar(moyennes.index, moyennes.values, color=couleurs)
+        moyennes = df_hist.groupby("Chapitre")["Score"].mean()
+        ax2.bar(moyennes.index, moyennes.values, color="skyblue")
         ax2.set_ylabel("Score moyen")
         ax2.set_title("Score moyen par chapitre")
         plt.xticks(rotation=45, ha="right")
