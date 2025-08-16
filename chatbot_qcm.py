@@ -103,12 +103,15 @@ Difficulté : {difficulte}.
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
 
+        # Vérif respect du thème
+        description_theme = themes_automatismes[chapitre_choisi]
         mots_cles = [mot.strip().lower() for mot in description_theme.replace(",", "").split()]
         if not any(mot in qcm_raw["question"].lower() for mot in mots_cles):
             return None
 
         st.session_state.seen_questions.add(qcm_raw["question"])
 
+        # Mélange options
         original_options = qcm_raw["options"]
         items = list(original_options.items())
         random.shuffle(items)
@@ -147,7 +150,7 @@ def save_results_to_csv():
 # Génération uniquement si un chapitre est choisi
 if chapitre_choisi != "--- Choisir un chapitre ---":
     if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.session_state.max_questions):
-        while True:
+        for _ in range(5):  # max 5 tentatives
             qcm = generate_unique_qcm()
             if qcm:
                 st.session_state.qcm_data = qcm
