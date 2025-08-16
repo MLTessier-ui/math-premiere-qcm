@@ -100,10 +100,7 @@ Difficulté : {difficulte}.
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
 
-        # Vérif allégée : juste vérifier que le chapitre est mentionné
-        if chapitre_choisi.lower().split()[0] not in qcm_raw["question"].lower():
-            return None
-
+        # (filtrage désactivé pour ne pas bloquer les questions)
         st.session_state.seen_questions.add(qcm_raw["question"])
 
         # Mélange options
