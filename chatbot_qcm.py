@@ -47,7 +47,8 @@ for var, default in {
     "nb_questions": 0,
     "max_questions": nb_questions,
     "seen_questions": set(),
-    "answers_log": []
+    "answers_log": [],
+    "explication_lue": False
 }.items():
     if var not in st.session_state:
         st.session_state[var] = default
@@ -64,7 +65,9 @@ La difficulté est : {difficulte}.
 
 ⚠️ Contraintes importantes :
 - La question doit être autonome, claire et compréhensible SANS graphique, tableau ou schéma externe.
-- Elle doit pouvoir être résolue en CALCUL MENTAL ou avec des calculs très simples (pas de fractions compliquées, pas de grands nombres, pas d'expressions lourdes).
+- Elle doit pouvoir être résolue en CALCUL MENTAL ou avec des calculs très simples.
+- Les nombres utilisés doivent être SIMPLES : inférieurs à 100, maximum 2 chiffres.
+- Les calculs doivent pouvoir être faits de tête en moins de 30 secondes.
 - Fournis exactement 4 réponses différentes : A, B, C, D.
 - Une SEULE réponse doit être correcte et ABSOLUMENT incluse dans les options.
 - Les 3 autres doivent être fausses mais plausibles.
@@ -86,7 +89,7 @@ Réponds STRICTEMENT en JSON valide avec guillemets doubles :
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",   # rapide et précis
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt_data}],
             temperature=0.5
         )
@@ -162,40 +165,48 @@ if chapitre_choisi != "--- Choisir un chapitre ---":
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_data and st.session_state.nb_questions < st.session_state.max_questions:
     q = st.session_state.qcm_data
     st.markdown(f"**❓ Question {st.session_state.nb_questions+1}/{st.session_state.max_questions} :** {q['question']}")
-    st.markdown(f"📌 Il reste {st.session_state.max_questions - st.session_state.nb_questions} questions")
 
-    st.session_state.user_answer = st.radio(
-        "Choisis ta réponse :",
-        list(q["options"].keys()),
-        format_func=lambda k: f"{k} : {q['options'][k]}",
-        index=None
-    )
+    if not st.session_state.explication_lue:
+        st.session_state.user_answer = st.radio(
+            "Choisis ta réponse :",
+            list(q["options"].keys()),
+            format_func=lambda k: f"{k} : {q['options'][k]}",
+            index=None
+        )
 
-    if st.button("✅ Valider ma réponse") and st.session_state.user_answer:
-        user_letter = st.session_state.user_answer
-        correct_letter = q["correct_answer"]
-        is_correct = user_letter == correct_letter
+        if st.button("✅ Valider ma réponse") and st.session_state.user_answer:
+            user_letter = st.session_state.user_answer
+            correct_letter = q["correct_answer"]
+            is_correct = user_letter == correct_letter
 
-        if not mode_examen:
+            if not mode_examen:
+                if is_correct:
+                    st.success("✅ Bravo, c'est la bonne réponse !")
+                else:
+                    st.error(f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**")
+                st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
+
+            st.session_state.answers_log.append({
+                "question": q["question"],
+                "votre réponse": f"{user_letter} : {q['options'][user_letter]}",
+                "bonne réponse": f"{correct_letter} : {q['options'][correct_letter]}",
+                "explication": q["explanation"],
+                "correct": is_correct
+            })
+
             if is_correct:
-                st.success("✅ Bravo, c'est la bonne réponse !")
-            else:
-                st.error(f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**")
-            st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
+                st.session_state.score += 1
 
-        st.session_state.answers_log.append({
-            "question": q["question"],
-            "votre réponse": f"{user_letter} : {q['options'][user_letter]}",
-            "bonne réponse": f"{correct_letter} : {q['options'][correct_letter]}",
-            "explication": q["explanation"],
-            "correct": is_correct
-        })
+            # Attente validation explication
+            st.session_state.explication_lue = True
+            st.stop()
 
-        if is_correct:
-            st.session_state.score += 1
-        st.session_state.nb_questions += 1
-        st.session_state.qcm_data = None
-        st.rerun()
+    else:
+        if st.button("👉 J’ai lu l’explication, question suivante"):
+            st.session_state.nb_questions += 1
+            st.session_state.qcm_data = None
+            st.session_state.explication_lue = False
+            st.rerun()
 
 # Fin
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_questions >= st.session_state.max_questions:
@@ -223,4 +234,5 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_ques
         st.session_state.qcm_data = None
         st.session_state.answers_log.clear()
         st.session_state.seen_questions.clear()
+        st.session_state.explication_lue = False
         st.rerun()
