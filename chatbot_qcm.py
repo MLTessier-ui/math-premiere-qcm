@@ -22,10 +22,10 @@ themes_automatismes = {
     "Probabilités": "Expériences aléatoires simples, calculs de probabilités, événements contraires."
 }
 
-# Sélection utilisateur
+# --- Interface utilisateur ---
+nb_questions = st.slider("Nombre de questions", 5, 20, 10)
 chapitres = list(themes_automatismes.keys())
 chapitre_choisi = st.selectbox("📘 Chapitre :", ["--- Choisir un chapitre ---"] + chapitres)
-nb_questions = st.slider("Nombre de questions", 5, 20, 10)
 difficulte = st.selectbox("Niveau de difficulté", ["Facile", "Moyen", "Difficile"])
 mode_examen = st.checkbox("Mode examen (corrigé à la fin)")
 
@@ -48,14 +48,15 @@ for var, default in {
     "max_questions": nb_questions,
     "seen_questions": set(),
     "answers_log": [],
-    "explication_lue": False
+    "explication_lue": False,
+    "last_feedback": None
 }.items():
     if var not in st.session_state:
         st.session_state[var] = default
 
 st.session_state.max_questions = nb_questions
 
-# Génération avec consignes renforcées
+# Génération QCM
 def generate_unique_qcm():
     description_theme = themes_automatismes[chapitre_choisi]
     prompt_data = f"""Tu es un professeur de mathématiques.
@@ -103,28 +104,19 @@ Réponds STRICTEMENT en JSON valide avec guillemets doubles :
             else:
                 return None
 
-        # Vérifier unicité et cohérence
+        # Vérification unicité
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
-        if qcm_raw["correct_answer"] not in qcm_raw["options"]:
-            return None
-
         st.session_state.seen_questions.add(qcm_raw["question"])
 
         # Mélange options
         original_options = qcm_raw["options"]
+        correct_text = original_options[qcm_raw["correct_answer"]]
         items = list(original_options.items())
         random.shuffle(items)
         new_letters = ["A", "B", "C", "D"]
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
-
-        correct_text = original_options[qcm_raw["correct_answer"]]
-        correct_letter = next(
-            (letter for letter, text in shuffled_options.items() if text == correct_text),
-            None
-        )
-        if correct_letter is None:
-            return None
+        correct_letter = next(letter for letter, text in shuffled_options.items() if text == correct_text)
 
         return {
             "question": qcm_raw["question"],
@@ -164,8 +156,10 @@ if chapitre_choisi != "--- Choisir un chapitre ---":
 # Affichage QCM
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_data and st.session_state.nb_questions < st.session_state.max_questions:
     q = st.session_state.qcm_data
+
     st.markdown(f"**❓ Question {st.session_state.nb_questions+1}/{st.session_state.max_questions} :** {q['question']}")
 
+    # Étape 1 : réponse
     if not st.session_state.explication_lue:
         st.session_state.user_answer = st.radio(
             "Choisis ta réponse :",
@@ -179,11 +173,14 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_dat
             correct_letter = q["correct_answer"]
             is_correct = user_letter == correct_letter
 
+            feedback = ""
             if not mode_examen:
                 if is_correct:
-                    st.success("✅ Bravo, c'est la bonne réponse !")
+                    feedback = "✅ Bravo, c'est la bonne réponse !"
+                    st.success(feedback)
                 else:
-                    st.error(f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**")
+                    feedback = f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**"
+                    st.error(feedback)
                 st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
 
             st.session_state.answers_log.append({
@@ -197,18 +194,23 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_dat
             if is_correct:
                 st.session_state.score += 1
 
-            # Attente validation explication
             st.session_state.explication_lue = True
-            st.stop()
+            st.session_state.last_feedback = feedback
 
+    # Étape 2 : confirmation lecture explication
     else:
+        if st.session_state.last_feedback:
+            st.info(st.session_state.last_feedback)
+            st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
+
         if st.button("👉 J’ai lu l’explication, question suivante"):
             st.session_state.nb_questions += 1
             st.session_state.qcm_data = None
             st.session_state.explication_lue = False
+            st.session_state.last_feedback = None
             st.rerun()
 
-# Fin
+# Fin du quiz
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_questions >= st.session_state.max_questions:
     save_results_to_csv()
     st.success(f"🎉 Quiz terminé ! Tu as obtenu {st.session_state.score} / {st.session_state.max_questions} bonnes réponses.")
@@ -235,4 +237,5 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_ques
         st.session_state.answers_log.clear()
         st.session_state.seen_questions.clear()
         st.session_state.explication_lue = False
+        st.session_state.last_feedback = None
         st.rerun()
