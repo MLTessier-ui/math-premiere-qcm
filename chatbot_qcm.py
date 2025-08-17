@@ -7,7 +7,6 @@ import sys
 import re
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
 
 # Configuration
 st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
@@ -18,8 +17,8 @@ themes_automatismes = {
     "Calcul numérique et algébrique": "Règles de calcul, priorités, puissances, factorisations simples, développements simples, identités remarquables.",
     "Proportions et pourcentages": "Proportionnalité, échelles, pourcentages simples et successifs, variations relatives.",
     "Évolutions et variations": "Augmentations, diminutions, taux d’évolution, variations composées.",
-    "Fonctions et représentations": "Lecture graphique, valeurs, antécédents, variations, extrema.",
-    "Statistiques": "Tableaux, diagrammes, moyennes, médianes, étendues.",
+    "Fonctions et représentations": "Lecture simple de tableaux ou d'expressions, valeurs, variations.",
+    "Statistiques": "Tableaux, moyennes, médianes, étendues, calculs simples.",
     "Probabilités": "Expériences aléatoires simples, calculs de probabilités, événements contraires."
 }
 
@@ -55,19 +54,23 @@ for var, default in {
 
 st.session_state.max_questions = nb_questions
 
-# Génération avec vérification optimisée
+# Génération avec consignes renforcées
 def generate_unique_qcm():
     description_theme = themes_automatismes[chapitre_choisi]
     prompt_data = f"""Tu es un professeur de mathématiques.
 Génère une question QCM niveau Première (enseignement spécifique) sur le thème suivant : {chapitre_choisi}.
-Les questions doivent respecter les automatismes suivants : {description_theme}
-Difficulté : {difficulte}.
+Les questions doivent respecter les automatismes suivants : {description_theme}.
+La difficulté est : {difficulte}.
 
-- Fournis UNE question claire et concise.
-- Propose 4 réponses DIFFÉRENTES.
-- Donne UNE seule bonne réponse (ex: 'B').
-- Donne une explication pédagogique courte.
-- Réponds STRICTEMENT en JSON valide avec guillemets doubles pour clés et valeurs.
+⚠️ Contraintes importantes :
+- La question doit être autonome, claire et compréhensible SANS graphique, tableau ou schéma externe.
+- Elle doit pouvoir être résolue en CALCUL MENTAL ou avec des calculs très simples (pas de fractions compliquées, pas de grands nombres, pas d'expressions lourdes).
+- Fournis exactement 4 réponses différentes : A, B, C, D.
+- Une SEULE réponse doit être correcte et ABSOLUMENT incluse dans les options.
+- Les 3 autres doivent être fausses mais plausibles.
+- L'explication doit justifier pourquoi la bonne réponse est correcte et pourquoi les autres sont fausses.
+
+Réponds STRICTEMENT en JSON valide avec guillemets doubles :
 {{
   "question": "...",
   "options": {{
@@ -83,7 +86,7 @@ Difficulté : {difficulte}.
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",   # 🚀 modèle rapide
+            model="gpt-4o-mini",   # rapide et précis
             messages=[{"role": "user", "content": prompt_data}],
             temperature=0.5
         )
@@ -97,10 +100,12 @@ Difficulté : {difficulte}.
             else:
                 return None
 
+        # Vérifier unicité et cohérence
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
+        if qcm_raw["correct_answer"] not in qcm_raw["options"]:
+            return None
 
-        # (filtrage désactivé pour ne pas bloquer les questions)
         st.session_state.seen_questions.add(qcm_raw["question"])
 
         # Mélange options
@@ -111,7 +116,12 @@ Difficulté : {difficulte}.
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
 
         correct_text = original_options[qcm_raw["correct_answer"]]
-        correct_letter = next(letter for letter, text in shuffled_options.items() if text == correct_text)
+        correct_letter = next(
+            (letter for letter, text in shuffled_options.items() if text == correct_text),
+            None
+        )
+        if correct_letter is None:
+            return None
 
         return {
             "question": qcm_raw["question"],
@@ -142,7 +152,7 @@ def save_results_to_csv():
 # Génération uniquement si un chapitre est choisi
 if chapitre_choisi != "--- Choisir un chapitre ---":
     if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.session_state.max_questions):
-        for _ in range(2):  # ⚡ max 2 essais seulement
+        for _ in range(3):  # max 3 essais
             qcm = generate_unique_qcm()
             if qcm:
                 st.session_state.qcm_data = qcm
@@ -205,47 +215,6 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_ques
         st.markdown("## 📊 Historique des résultats")
         df_hist = pd.read_csv("resultats_qcm.csv")
         st.dataframe(df_hist)
-
-        # Graphique global
-        fig, ax = plt.subplots()
-        ax.plot(range(1, len(df_hist) + 1), df_hist["Score"], marker="o", label="Score")
-        ax.set_xlabel("Tentative")
-        ax.set_ylabel("Score")
-        ax.set_title("Évolution des scores")
-        ax.grid(True)
-        ax.legend()
-        st.pyplot(fig)
-
-        # Graphique par chapitre colorisé avec % au-dessus
-        st.markdown("### 📈 Score moyen par chapitre")
-        moyennes = df_hist.groupby("Chapitre")["Score"].mean()
-
-        couleurs = []
-        for score in moyennes.values:
-            if score >= 0.8 * nb_questions:
-                couleurs.append("green")
-            elif score >= 0.5 * nb_questions:
-                couleurs.append("gold")
-            else:
-                couleurs.append("red")
-
-        fig2, ax2 = plt.subplots()
-        bars = ax2.bar(moyennes.index, moyennes.values, color=couleurs)
-        ax2.set_ylabel("Score moyen")
-        ax2.set_title("Score moyen par chapitre")
-        plt.xticks(rotation=45, ha="right")
-
-        # Ajout des pourcentages
-        for bar, score in zip(bars, moyennes.values):
-            ax2.text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 0.1,
-                f"{(score/nb_questions)*100:.1f}%",
-                ha="center", va="bottom", fontsize=9, fontweight="bold"
-            )
-
-        st.pyplot(fig2)
-
         st.download_button("📥 Télécharger l'historique", df_hist.to_csv(index=False), "resultats_qcm.csv")
 
     if st.button("🔁 Recommencer un nouveau quiz"):
