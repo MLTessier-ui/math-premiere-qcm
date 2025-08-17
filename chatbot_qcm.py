@@ -8,7 +8,9 @@ import re
 import pandas as pd
 import os
 
+# ------------------------------
 # Configuration
+# ------------------------------
 st.set_page_config(page_title="Chatbot QCM Maths", page_icon="🧮")
 st.title("🤖 Chatbot QCM – Maths Première (enseignement spécifique)")
 
@@ -22,14 +24,18 @@ themes_automatismes = {
     "Probabilités": "Expériences aléatoires simples, calculs de probabilités, événements contraires."
 }
 
-# --- Interface utilisateur ---
+# ------------------------------
+# Interface utilisateur (ordre souhaité)
+# ------------------------------
 nb_questions = st.slider("Nombre de questions", 5, 20, 10)
 chapitres = list(themes_automatismes.keys())
 chapitre_choisi = st.selectbox("📘 Chapitre :", ["--- Choisir un chapitre ---"] + chapitres)
 difficulte = st.selectbox("Niveau de difficulté", ["Facile", "Moyen", "Difficile"])
 mode_examen = st.checkbox("Mode examen (corrigé à la fin)")
 
+# ------------------------------
 # Clé API
+# ------------------------------
 try:
     key = st.secrets["OPENAI_API_KEY"]
     key.encode("ascii")
@@ -39,8 +45,10 @@ except (KeyError, UnicodeEncodeError):
 
 client = openai.OpenAI(api_key=key)
 
-# Init session
-for var, default in {
+# ------------------------------
+# État de session
+# ------------------------------
+defaults = {
     "qcm_data": None,
     "user_answer": None,
     "score": 0,
@@ -49,14 +57,38 @@ for var, default in {
     "seen_questions": set(),
     "answers_log": [],
     "explication_lue": False,
-    "last_feedback": None
-}.items():
-    if var not in st.session_state:
-        st.session_state[var] = default
-
+    "last_feedback": None,
+    "last_explanation": None
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 st.session_state.max_questions = nb_questions
 
+# ------------------------------
+# Outil : remapper les lettres citées dans l'explication après mélange
+# ------------------------------
+def remap_explanation_letters(expl: str, mapping_old_to_new: dict) -> str:
+    """Remplace dans l'explication les références lettrelles (A/B/C/D) vers leur nouvelle lettre.
+       Essaie de couvrir les formes: 'réponse A', 'option B', 'choix C', '(D)', 'D)'."""
+    if not expl:
+        return expl
+    for old, new in mapping_old_to_new.items():
+        # (réponse|option|choix) + lettre
+        expl = re.sub(rf'(?i)\b(réponse|reponse|option|choix)\s*{old}\b',
+                      lambda m: m.group(0)[:-1] + new, expl, flags=re.IGNORECASE)
+        # (A) -> (NOUVELLE)
+        expl = re.sub(rf'\(\s*{old}\s*\)', f'({new})', expl, flags=re.IGNORECASE)
+        # A) -> NEW)
+        expl = re.sub(rf'\b{old}\)', f'{new})', expl, flags=re.IGNORECASE)
+        # "Réponse : A" -> "Réponse : NEW"
+        expl = re.sub(rf'(?i)(réponse|reponse)\s*:\s*{old}\b',
+                      lambda m: m.group(0)[:-1] + new, expl, flags=re.IGNORECASE)
+    return expl
+
+# ------------------------------
 # Génération QCM
+# ------------------------------
 def generate_unique_qcm():
     description_theme = themes_automatismes[chapitre_choisi]
     prompt_data = f"""Tu es un professeur de mathématiques.
@@ -72,7 +104,7 @@ La difficulté est : {difficulte}.
 - Fournis exactement 4 réponses différentes : A, B, C, D.
 - Une SEULE réponse doit être correcte et ABSOLUMENT incluse dans les options.
 - Les 3 autres doivent être fausses mais plausibles.
-- L'explication doit justifier pourquoi la bonne réponse est correcte et pourquoi les autres sont fausses.
+- Dans l'explication, N'UTILISE PAS les lettres A/B/C/D pour désigner les options ; explique le raisonnement et le résultat, sans citer de lettre.
 
 Réponds STRICTEMENT en JSON valide avec guillemets doubles :
 {{
@@ -87,7 +119,6 @@ Réponds STRICTEMENT en JSON valide avec guillemets doubles :
   "explanation": "..."
 }}
 """
-
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -95,39 +126,70 @@ Réponds STRICTEMENT en JSON valide avec guillemets doubles :
             temperature=0.5
         )
         content = response.choices[0].message.content.strip()
+
+        # Récup JSON robustement
         try:
             qcm_raw = json.loads(content)
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", content, re.S)
-            if match:
-                qcm_raw = json.loads(match.group())
-            else:
+            if not match:
                 return None
+            qcm_raw = json.loads(match.group())
 
-        # Vérification unicité
+        # Vérifs de cohérence
+        if not isinstance(qcm_raw.get("options"), dict):
+            return None
+        # 4 options distinctes
+        opt_texts = list(qcm_raw["options"].values())
+        if len(opt_texts) != 4 or len(set(opt_texts)) != 4:
+            return None
+        # Bonne réponse présente
+        if qcm_raw.get("correct_answer") not in qcm_raw["options"]:
+            return None
+        # Question non déjà vue
         if qcm_raw["question"] in st.session_state.seen_questions:
             return None
-        st.session_state.seen_questions.add(qcm_raw["question"])
 
-        # Mélange options
+        # Mélange options + mapping ancien->nouveau
         original_options = qcm_raw["options"]
-        correct_text = original_options[qcm_raw["correct_answer"]]
-        items = list(original_options.items())
+        items = list(original_options.items())  # [(old_letter, text), ...]
         random.shuffle(items)
         new_letters = ["A", "B", "C", "D"]
         shuffled_options = {new_letter: text for new_letter, (_, text) in zip(new_letters, items)}
-        correct_letter = next(letter for letter, text in shuffled_options.items() if text == correct_text)
+
+        # mapping old -> new
+        old_to_new = {}
+        for new_letter, (_, text) in zip(new_letters, items):
+            # retrouver l'ancienne lettre via le texte
+            for old_letter, old_text in original_options.items():
+                if old_text == text:
+                    old_to_new[old_letter] = new_letter
+                    break
+
+        # lettre correcte après mélange
+        correct_text = original_options[qcm_raw["correct_answer"]]
+        correct_letter = next((L for L, t in shuffled_options.items() if t == correct_text), None)
+        if correct_letter is None:
+            return None
+
+        # Remap des lettres éventuellement citées dans l'explication
+        explanation = qcm_raw.get("explanation", "")
+        explanation = remap_explanation_letters(explanation, old_to_new)
+
+        st.session_state.seen_questions.add(qcm_raw["question"])
 
         return {
             "question": qcm_raw["question"],
             "options": shuffled_options,
             "correct_answer": correct_letter,
-            "explanation": qcm_raw["explanation"]
+            "explanation": explanation
         }
     except Exception:
         return None
 
-# Sauvegarde CSV
+# ------------------------------
+# Sauvegarde CSV (historique)
+# ------------------------------
 def save_results_to_csv():
     filename = "resultats_qcm.csv"
     new_data = {
@@ -144,22 +206,25 @@ def save_results_to_csv():
         df_all = df_new
     df_all.to_csv(filename, index=False)
 
+# ------------------------------
 # Génération uniquement si un chapitre est choisi
+# ------------------------------
 if chapitre_choisi != "--- Choisir un chapitre ---":
     if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.session_state.max_questions):
-        for _ in range(3):  # max 3 essais
+        for _ in range(4):  # quelques essais en cas de JSON invalide
             qcm = generate_unique_qcm()
             if qcm:
                 st.session_state.qcm_data = qcm
                 break
 
+# ------------------------------
 # Affichage QCM
+# ------------------------------
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_data and st.session_state.nb_questions < st.session_state.max_questions:
     q = st.session_state.qcm_data
-
     st.markdown(f"**❓ Question {st.session_state.nb_questions+1}/{st.session_state.max_questions} :** {q['question']}")
 
-    # Étape 1 : réponse
+    # Étape 1 : choix + validation
     if not st.session_state.explication_lue:
         st.session_state.user_answer = st.radio(
             "Choisis ta réponse :",
@@ -171,46 +236,69 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.qcm_dat
         if st.button("✅ Valider ma réponse") and st.session_state.user_answer:
             user_letter = st.session_state.user_answer
             correct_letter = q["correct_answer"]
-            is_correct = user_letter == correct_letter
+            is_correct = (user_letter == correct_letter)
 
-            feedback = ""
+            # En mode entraînement : on montre tout de suite
             if not mode_examen:
                 if is_correct:
-                    feedback = "✅ Bravo, c'est la bonne réponse !"
-                    st.success(feedback)
+                    st.session_state.last_feedback = "✅ Bravo, c'est la bonne réponse !"
                 else:
-                    feedback = f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**"
-                    st.error(feedback)
-                st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
+                    st.session_state.last_feedback = f"❌ Mauvais choix. La bonne réponse était **{correct_letter} : {q['options'][correct_letter]}**"
+                st.session_state.last_explanation = q["explanation"]
 
-            st.session_state.answers_log.append({
-                "question": q["question"],
-                "votre réponse": f"{user_letter} : {q['options'][user_letter]}",
-                "bonne réponse": f"{correct_letter} : {q['options'][correct_letter]}",
-                "explication": q["explanation"],
-                "correct": is_correct
-            })
+                # On bascule en mode "lecture explication"
+                st.session_state.explication_lue = True
 
-            if is_correct:
-                st.session_state.score += 1
+                # Log réponse
+                st.session_state.answers_log.append({
+                    "question": q["question"],
+                    "votre réponse": f"{user_letter} : {q['options'][user_letter]}",
+                    "bonne réponse": f"{correct_letter} : {q['options'][correct_letter]}",
+                    "explication": q["explanation"],
+                    "correct": is_correct
+                })
+                if is_correct:
+                    st.session_state.score += 1
 
-            st.session_state.explication_lue = True
-            st.session_state.last_feedback = feedback
+                # Re-rendu immédiat pour faire apparaître le bouton "J'ai lu..."
+                st.rerun()
 
-    # Étape 2 : confirmation lecture explication
+            # En mode examen : on enchaîne directement sans explication intermédiaire
+            else:
+                st.session_state.answers_log.append({
+                    "question": q["question"],
+                    "votre réponse": f"{user_letter} : {q['options'][user_letter]}",
+                    "bonne réponse": f"{correct_letter} : {q['options'][correct_letter]}",
+                    "explication": q["explanation"],
+                    "correct": is_correct
+                })
+                if is_correct:
+                    st.session_state.score += 1
+                st.session_state.nb_questions += 1
+                st.session_state.qcm_data = None
+                st.rerun()
+
+    # Étape 2 : lecture + bouton pour continuer
     else:
         if st.session_state.last_feedback:
-            st.info(st.session_state.last_feedback)
-            st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {q['explanation']}</span>", unsafe_allow_html=True)
+            # Affiche le feedback + l'explication
+            if st.session_state.last_feedback.startswith("✅"):
+                st.success(st.session_state.last_feedback)
+            else:
+                st.error(st.session_state.last_feedback)
+            st.markdown(f"<span style='color:black;'><b>💡 Explication :</b> {st.session_state.last_explanation}</span>", unsafe_allow_html=True)
 
         if st.button("👉 J’ai lu l’explication, question suivante"):
             st.session_state.nb_questions += 1
             st.session_state.qcm_data = None
             st.session_state.explication_lue = False
             st.session_state.last_feedback = None
+            st.session_state.last_explanation = None
             st.rerun()
 
+# ------------------------------
 # Fin du quiz
+# ------------------------------
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_questions >= st.session_state.max_questions:
     save_results_to_csv()
     st.success(f"🎉 Quiz terminé ! Tu as obtenu {st.session_state.score} / {st.session_state.max_questions} bonnes réponses.")
@@ -238,4 +326,5 @@ if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_ques
         st.session_state.seen_questions.clear()
         st.session_state.explication_lue = False
         st.session_state.last_feedback = None
+        st.session_state.last_explanation = None
         st.rerun()
