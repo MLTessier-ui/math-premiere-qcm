@@ -20,7 +20,7 @@ themes_automatismes = {
     "Calcul numérique et algébrique": "Règles de calcul, priorités, puissances, factorisations simples, développements simples, identités remarquables.",
     "Proportions et pourcentages": "Proportionnalité, échelles, pourcentages simples et successifs, variations relatives.",
     "Évolutions et variations": "Augmentations, diminutions, taux d’évolution, variations composées.",
-    "Fonctions et représentations": "Lecture simple de tableaux ou d'expressions, valeurs, variations.",
+    "Fonctions et représentations": "Lecture simple de tableaux ou d'expressions, valeurs, variations, pente, lecture graphique.",
     "Statistiques": "Tableaux, moyennes, médianes, étendues, calculs simples.",
     "Probabilités": "Expériences aléatoires simples, calculs de probabilités, événements contraires."
 }
@@ -61,6 +61,7 @@ defaults = {
     "explication_lue": False,
     "last_feedback": None,
     "last_explanation": None,
+    "nb_graphics": 0  # compteur pour quota graphique
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -70,21 +71,11 @@ st.session_state.max_questions = nb_questions
 # ------------------------------
 # Fonctions utilitaires
 # ------------------------------
-def remap_explanation_letters(expl: str, mapping_old_to_new: dict) -> str:
-    if not expl:
-        return expl
-    for old, new in mapping_old_to_new.items():
-        expl = re.sub(rf'(?i)\b(réponse|reponse|option|choix)\s*{old}\b',
-                      lambda m: m.group(0)[:-1] + new, expl, flags=re.IGNORECASE)
-    return expl
-
 def plot_from_support(support_type, support_md):
     try:
         if support_type == "table":
-            # Essai : parser un tableau Markdown simple
             lines = [l.strip("| ") for l in support_md.strip().splitlines() if "|" in l]
             if len(lines) >= 2:
-                headers = [h.strip() for h in lines[0].split("|") if h.strip()]
                 values = [l.split("|") for l in lines[2:]]
                 xs, ys = [], []
                 for v in values:
@@ -96,11 +87,10 @@ def plot_from_support(support_type, support_md):
                 if xs and ys:
                     fig, ax = plt.subplots()
                     ax.plot(xs, ys, marker="o")
-                    ax.set_title("Lecture graphique (à partir du tableau)")
+                    ax.set_title("Lecture graphique (tableau)")
                     st.pyplot(fig)
                     return True
         elif support_type == "description":
-            # Essai : détecter une fonction du type f(x)=ax^2+bx+c ou ax+b
             match = re.search(r"f\(x\)\s*=\s*([0-9x\+\-\*/\s^]+)", support_md)
             if match:
                 expr = match.group(1).replace("^", "**")
@@ -126,9 +116,15 @@ def generate_unique_qcm():
     description_theme = themes_automatismes[chapitre_choisi]
     difficulte_guidelines = {
         "Facile": "Automatisme direct, calcul mental < 10 s, nombres simples ≤ 100.",
-        "Moyen": "1-2 étapes de raisonnement, calcul mental < 30 s, nombres simples ≤ 100.",
-        "Difficile": "Plusieurs étapes logiques mais faisable sans calculatrice, nombres ≤ 100."
+        "Moyen": "Au moins une étape de raisonnement intermédiaire (comparaison, pente, propriété).",
+        "Difficile": "Plusieurs étapes logiques ou combinaison de notions, faisable sans calculatrice."
     }
+
+    need_graphic = False
+    if chapitre_choisi == "Fonctions et représentations":
+        min_graphics = int(0.3 * st.session_state.max_questions)
+        if st.session_state.nb_graphics < min_graphics:
+            need_graphic = True
 
     prompt_data = f"""Tu es un professeur de mathématiques.
 Génère UNE question QCM niveau Première (enseignement spécifique) sur le thème : {chapitre_choisi}.
@@ -140,9 +136,9 @@ Niveau : {difficulte} → {difficulte_guidelines[difficulte]}.
 - UNE SEULE bonne réponse, incluse dans les options.
 - Explication pédagogique brève.
 - Ne cite pas A/B/C/D dans l'explication.
-- Si la question implique une lecture graphique, fournis un support :
-  "support_type": "table" (avec petit tableau Markdown) OU "description" (texte court).
-Sinon "support_type": "none".
+- La question doit être différente des précédentes (varie le type de tâche).
+- { "La question DOIT inclure un support graphique (support_type = 'table' ou 'description')." if need_graphic else "Le support graphique est optionnel (none/table/description)." }
+
 Réponds uniquement en JSON :
 {{
   "question": "...",
@@ -163,11 +159,12 @@ Réponds uniquement en JSON :
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt_data}],
-            temperature=0.4
+            temperature=0.5
         )
         content = response.choices[0].message.content.strip()
         qcm_raw = json.loads(re.search(r"\{.*\}", content, re.S).group())
 
+        # Vérifications
         options = qcm_raw["options"]
         opt_texts = list(options.values())
         if len(set(opt_texts)) != 4:
@@ -182,6 +179,15 @@ Réponds uniquement en JSON :
         shuffled_options = {L: t for L, (_, t) in zip(["A","B","C","D"], items)}
         correct_letter = next(L for L,t in shuffled_options.items() if t == ca_text)
 
+        # Unicité
+        if qcm_raw["question"] in st.session_state.seen_questions:
+            return None
+        st.session_state.seen_questions.add(qcm_raw["question"])
+
+        # Compteur graphique
+        if qcm_raw["support_type"] != "none":
+            st.session_state.nb_graphics += 1
+
         return {
             "question": qcm_raw["question"],
             "support_type": qcm_raw["support_type"],
@@ -195,7 +201,7 @@ Réponds uniquement en JSON :
         return None
 
 # ------------------------------
-# Boucle
+# Boucle principale
 # ------------------------------
 if chapitre_choisi != "--- Choisir un chapitre ---":
     if (not st.session_state.qcm_data) and (st.session_state.nb_questions < st.session_state.max_questions):
@@ -228,10 +234,20 @@ if (
             user = st.session_state.user_answer
             correct = q["correct_answer"]
             is_correct = (user == correct)
+
             if not mode_examen:
                 st.session_state.last_feedback = "✅ Bravo !" if is_correct else f"❌ Mauvais choix. Bonne réponse : {correct} : {q['options'][correct]}"
                 st.session_state.last_explanation = q["explanation"]
                 st.session_state.explication_lue = True
+                if is_correct:
+                    st.session_state.score += 1
+                st.session_state.answers_log.append({
+                    "question": q["question"],
+                    "réponse élève": f"{user} : {q['options'][user]}",
+                    "bonne réponse": f"{correct} : {q['options'][correct]}",
+                    "explication": q["explanation"],
+                    "correct": is_correct
+                })
                 st.rerun()
             else:
                 st.session_state.nb_questions += 1
@@ -256,7 +272,14 @@ if (
 # ------------------------------
 if chapitre_choisi != "--- Choisir un chapitre ---" and st.session_state.nb_questions >= st.session_state.max_questions:
     st.success(f"🎉 Terminé ! Score : {st.session_state.score}/{st.session_state.max_questions}")
+
+    # Export CSV
+    df = pd.DataFrame(st.session_state.answers_log)
+    csv_path = "resultats_quiz.csv"
+    df.to_csv(csv_path, index=False, encoding="utf-8")
+    st.download_button("📥 Télécharger mes résultats (CSV)", data=df.to_csv(index=False).encode("utf-8"), file_name=csv_path)
+
     if st.button("🔁 Recommencer"):
-        for k in ["qcm_data","user_answer","score","nb_questions","answers_log","seen_questions","explication_lue","last_feedback","last_explanation"]:
-            st.session_state[k] = defaults[k] if k in defaults else None
+        for k in defaults.keys():
+            st.session_state[k] = defaults[k]
         st.rerun()
