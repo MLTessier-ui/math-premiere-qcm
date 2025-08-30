@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Tuple, Optional
-import random, re, math, statistics
+import random
 import numpy as np
 
-# =========================
-# Thèmes officiels du BO
-# =========================
+# ===============================
+# Classes
+# ===============================
+class Question:
+    def __init__(self, theme, difficulty, stem, choices, correct_index, explanation, plot=False, plot_payload=None):
+        self.theme = theme
+        self.difficulty = difficulty
+        self.stem = stem
+        self.choices = choices
+        self.correct_index = correct_index
+        self.explanation = explanation
+        self.plot = plot
+        self.plot_payload = plot_payload or {}
+
 THEMES = [
     "Calcul numérique et algébrique",
     "Proportions et pourcentages",
@@ -18,248 +27,173 @@ THEMES = [
 
 Difficulty = ["Facile", "Moyen", "Difficile"]
 
-# =========================
-# Modèle de Question
-# =========================
-@dataclass
-class Question:
-    theme: str
-    difficulty: str
-    stem: str
-    choices: List[str]
-    correct_index: int
-    explanation: str
-    plot: bool = False
-    plot_payload: Optional[Dict] = None
-
-# =========================
-# Fonctions utilitaires
-# =========================
+# ===============================
+# Outils utilitaires
+# ===============================
 def _norm(s: str) -> str:
-    s = s.lower().strip()
-    s = re.sub(r"\s+", " ", s)
-    return s
+    return str(s).strip().lower()
 
-def _unique_choices(choices: List[str]) -> bool:
-    seen = set()
-    for c in choices:
-        k = _norm(c)
-        if k in seen:
-            return False
-        seen.add(k)
-    return True
-
-def validate(q: Question) -> Tuple[bool, List[str]]:
-    """Valide une question (unicité des choix, explication non vide, etc.)."""
+def validate(q: Question):
     issues = []
-    if q.theme not in THEMES:
-        issues.append("Thème inconnu.")
-    if q.difficulty not in Difficulty:
-        issues.append("Difficulté invalide.")
     if len(q.choices) != 4:
-        issues.append("Nombre de choix différent de 4.")
+        issues.append("Pas 4 choix")
     if not (0 <= q.correct_index < 4):
-        issues.append("Index de la bonne réponse hors bornes.")
-    if not _unique_choices(q.choices):
-        issues.append("Doublon dans les réponses proposées.")
-    if not q.explanation or len(_norm(q.explanation)) < 8:
-        issues.append("Explication manquante ou trop courte.")
-    if q.plot and not q.plot_payload:
-        issues.append("Graphique demandé sans paramètres.")
-    return (len(issues) == 0, issues)
+        issues.append("Index hors bornes")
+    normed = [_norm(c) for c in q.choices]
+    if len(set(normed)) != 4:
+        issues.append("Choix non uniques")
+    if not q.explanation:
+        issues.append("Explication manquante")
+    return (len(issues) == 0), issues
 
-# =========================
-# GÉNÉRATEURS PAR THÈME
-# =========================
-def _gen_calc_num(difficulty: str, rng: random.Random) -> Question:
-    """Calcul numérique et algébrique : puissances, fractions, développements."""
-    if difficulty == "Facile":
-        a, b = rng.randint(2, 5), rng.randint(2, 5)
-        stem = f"Calculer : {a}² + {b}²."
-        correct = str(a**2 + b**2)
-        distractors = [str((a+b)**2), str(a**2 - b**2), str(a*b)]
-        expl = f"{a}² + {b}² = {a**2} + {b**2} = {a**2+b**2}."
-    elif difficulty == "Moyen":
-        a, b = rng.randint(2, 5), rng.randint(2, 4)
-        stem = f"Développer : ({a}x + {b})²."
-        correct = f"{a**2}x² + {2*a*b}x + {b**2}"
-        distractors = [f"{a**2}x² + {b**2}", f"{a**2}x² + {2*a*b}x", f"{(a+b)**2}"]
-        expl = f"Identité remarquable : (ax+b)² = a²x²+2abx+b²."
-    else:  # Difficile
-        a, b, c = rng.randint(2,4), rng.randint(2,4), rng.randint(2,4)
-        stem = f"Factoriser : {a}x² + {b}x."
-        correct = f"x({a}x+{b})"
-        distractors = [f"({a}x+{b})(x+1)", f"{a}x(x+{b})", f"x²({a}+{b})"]
-        expl = f"Factorisation par x : {a}x²+{b}x = x({a}x+{b})."
-    choices = [correct] + distractors
-    rng.shuffle(choices)
-    return Question("Calcul numérique et algébrique", difficulty, stem, choices, choices.index(correct), expl)
+def to_dict(q: Question) -> dict:
+    return {
+        "theme": q.theme,
+        "difficulty": q.difficulty,
+        "stem": q.stem,
+        "choices": q.choices,
+        "correct_index": q.correct_index,
+        "explanation": q.explanation,
+        "plot": q.plot,
+        "plot_payload": q.plot_payload
+    }
 
-def _gen_proportions(difficulty: str, rng: random.Random) -> Question:
-    total = rng.randint(50, 150)
-    part = rng.randint(10, total-10)
-    if difficulty == "Facile":
-        stem = f"Dans une classe de {total} élèves, {part} sont des filles. Quelle proportion cela représente-t-il ?"
-        correct = f"{round(100*part/total,1)} %"
-        distractors = [f"{round(100*(total-part)/total,1)} %", f"{round(part/total,2)}", f"{round(total/part,2)}"]
-        expl = f"Proportion = {part}/{total} = {round(part/total,2)} → {correct}."
-    elif difficulty == "Moyen":
-        stem = f"Exprimer la proportion {part}/{total} sous forme de pourcentage."
-        correct = f"{round(100*part/total,1)} %"
-        distractors = [f"{part}/{total}", f"{round(part/total,2)}", f"{round(total/part,2)} %"]
-        expl = f"Proportion = {part}/{total} = {round(part/total,2)} = {correct}."
-    else:  # Difficile
-        stem = f"On a {part} éléments sur {total}. Donner la fraction irréductible."
-        from math import gcd
-        g = gcd(part, total)
-        correct = f"{part//g}/{total//g}"
-        distractors = [f"{part}/{total}", f"{total}/{part}", f"{part+1}/{total}"]
-        expl = f"Fraction irréductible : {part}/{total} ÷ {g} = {correct}."
-    ch = [correct] + distractors
-    rng.shuffle(ch)
-    return Question("Proportions et pourcentages", difficulty, stem, ch, ch.index(correct), expl)
+# ===============================
+# Générateurs par thème
+# ===============================
 
-def _gen_evolutions(difficulty: str, rng: random.Random) -> Question:
-    val = rng.randint(50, 500)
+def _gen_calcul(difficulty, rng):
+    a = rng.randint(2, 12)
+    b = rng.randint(2, 12)
     if difficulty == "Facile":
-        taux = rng.choice([5, 10])
+        stem = f"Calcule {a} × {b}"
+        correct = a * b
     elif difficulty == "Moyen":
-        taux = rng.choice([15, 20])
+        stem = f"Calcule ({a}+{b})²"
+        correct = (a+b)**2
     else:
-        taux = rng.choice([25, 30, 40])
-    stem = f"Un prix de {val} € augmente de {taux} %. Quelle est la nouvelle valeur ?"
-    correct = f"{round(val*(1+taux/100),2)}"
-    distractors = [f"{round(val*(1-taux/100),2)}", f"{val+taux}", f"{round(val*(taux/100),2)}"]
-    ch = [correct] + distractors
-    rng.shuffle(ch)
-    expl = f"Nouvelle valeur = {val}×(1+{taux}/100) = {correct}."
-    return Question("Évolutions et variations", difficulty, stem, ch, ch.index(correct), expl)
+        stem = f"Développe ({a}−{b})({a}+{b})"
+        correct = a**2 - b**2
+    choices = [correct, correct+1, correct-1, correct+2]
+    rng.shuffle(choices)
+    return Question("Calcul numérique et algébrique", difficulty, stem, [str(c) for c in choices], choices.index(correct), f"On applique les règles de calcul.")
 
-def _gen_fonctions(difficulty: str, rng: random.Random) -> Question:
+def _gen_proportions(difficulty, rng):
+    base = rng.randint(50,200)
+    pct = rng.choice([10,20,25,50])
     if difficulty == "Facile":
-        a, b, x0 = rng.randint(1, 5), rng.randint(-5, 5), rng.randint(-3, 3)
-        stem = f"Soit f(x) = {a}x + {b}. Quelle est l’image de {x0} par f ?"
-        f_x0 = a*x0 + b
-        correct = str(f_x0)
-        distractors = [str(f_x0+1), str(f_x0-1), str(-f_x0)]
-        expl = f"f({x0}) = {a}×{x0}+{b} = {f_x0}."
+        stem = f"Augmenter {base} de {pct}%"
+        correct = base*(1+pct/100)
     elif difficulty == "Moyen":
-        a, b = rng.randint(1, 5), rng.randint(-5, 5)
-        stem = f"Quelle est l’équation réduite de la droite de coefficient directeur {a} passant par (0,{b}) ?"
-        correct = f"y = {a}x + {b}"
-        distractors = [f"y = {b}x + {a}", f"y = {a}x - {b}", f"y = {a+b}x"]
-        expl = f"Une droite de pente {a} et ordonnée à l’origine {b} : y={a}x+{b}."
-    else:  # Difficile
-        x1,y1 = rng.randint(-4,4), rng.randint(-4,4)
-        x2,y2 = rng.randint(-4,4), rng.randint(-4,4)
-        a = (y2-y1)/(x2-x1) if x2!=x1 else 1
-        b = y1 - a*x1
-        stem = f"Quelle est l’équation de la droite passant par A({x1},{y1}) et B({x2},{y2}) ?"
-        correct = f"y = {round(a,2)}x + {round(b,2)}"
-        distractors = [f"y = {round(-a,2)}x + {round(b,2)}", f"y = {round(a,2)}x", f"y = {round(a,2)}x - {round(b,2)}"]
-        expl = f"Coefficient directeur a = (y2-y1)/(x2-x1) = {round(a,2)}, donc y={round(a,2)}x+{round(b,2)}."
-    ch = [correct] + distractors
-    rng.shuffle(ch)
-    payload = {"type":"affine","a":a,"b":b,"points":[] }
-    return Question("Fonctions et représentations", difficulty, stem, ch, ch.index(correct), expl, plot=True, plot_payload=payload)
+        stem = f"Réduire {base} de {pct}%"
+        correct = base*(1-pct/100)
+    else:
+        stem = f"Augmenter {base} de {pct}% puis réduire le résultat de {pct}%"
+        correct = base*(1+pct/100)*(1-pct/100)
+    choices = [correct, correct+10, correct-10, round(correct*1.1)]
+    rng.shuffle(choices)
+    return Question("Proportions et pourcentages", difficulty, stem, [str(round(c,2)) for c in choices], choices.index(correct), "On applique les pourcentages successivement.")
 
-def _gen_stats(difficulty: str, rng: random.Random) -> Question:
-    data = [rng.randint(5, 15) for _ in range(10)]
+def _gen_evolutions(difficulty, rng):
+    u0 = rng.randint(100,200)
+    r = rng.randint(2,10)
     if difficulty == "Facile":
-        m = round(statistics.mean(data),1)
-        stem = f"Données : {data}. Quelle est la moyenne arrondie à 0,1 près ?"
-        correct = f"{m}"
-        distractors = [f"{m+0.5}", f"{m-0.5}", f"{round(m+1.0,1)}"]
-        expl = f"Moyenne = {sum(data)}/{len(data)} = {round(statistics.mean(data),2)} ≈ {m}."
+        stem = f"Suite arithmétique : u₀={u0}, raison r={r}. Calculer u₁."
+        correct = u0+r
     elif difficulty == "Moyen":
-        stem = f"Données : {data}. Quelle est la médiane ?"
-        correct = str(statistics.median(data))
-        distractors = [str(min(data)), str(max(data)), str(round(statistics.mean(data),1))]
-        expl = "La médiane sépare la série ordonnée en deux parties égales."
-    else:  # Difficile
-        stem = f"Données : {data}. Quel est le premier quartile (Q1) ?"
-        q1 = np.percentile(sorted(data),25)
-        correct = str(q1)
-        distractors = [str(np.percentile(sorted(data),50)), str(min(data)), str(max(data))]
-        expl = "Q1 est la valeur qui sépare 25% des données les plus petites."
-    ch = [correct] + distractors
-    rng.shuffle(ch)
+        stem = f"Suite arithmétique : u₀={u0}, r={r}. Calculer u₅."
+        correct = u0+5*r
+    else:
+        stem = f"Suite géométrique : u₀={u0}, q={r/10}. Calculer u₃."
+        correct = u0*(r/10)**3
+    choices = [correct, correct+1, correct-1, correct+5]
+    rng.shuffle(choices)
+    return Question("Évolutions et variations", difficulty, stem, [str(round(c,2)) for c in choices], choices.index(correct), "On utilise la formule explicite des suites.")
+
+def _gen_fonctions(difficulty, rng):
+    a = rng.randint(1,5)
+    b = rng.randint(-5,5)
+    stem = f"On considère une fonction affine représentée ci-dessous. Quelle est son expression algébrique ?"
+    correct = f"{a}x+{b}" if b>=0 else f"{a}x{b}"
+    distractors = [f"{a+1}x+{b}", f"{a}x+{b+1}", f"{a-1}x+{b}"]
+    choices = [correct]+distractors
+    rng.shuffle(choices)
+    payload = {"type":"affine","a":a,"b":b,"points":[]}
+    return Question("Fonctions et représentations", difficulty, stem, choices, choices.index(correct), "On lit le coefficient directeur et l'ordonnée à l'origine sur le graphique.", plot=True, plot_payload=payload)
+
+def _gen_stats(difficulty, rng):
+    data = [rng.randint(5,20) for _ in range(10)]
+    mean = sum(data)/len(data)
+    if difficulty=="Facile":
+        stem = f"On a relevé 10 valeurs (voir histogramme). Quelle est leur moyenne arrondie à l'unité ?"
+        correct = round(mean)
+        distractors = [correct+1, correct-1, correct+2]
+    elif difficulty=="Moyen":
+        stem = f"Quelle est la médiane de cette série de 10 valeurs (voir histogramme) ?"
+        sorted_data = sorted(data)
+        correct = (sorted_data[4]+sorted_data[5])/2
+        distractors = [correct+1, correct-1, sorted_data[0]]
+    else:
+        stem = f"Quelle est l'étendue de cette série (voir histogramme) ?"
+        correct = max(data)-min(data)
+        distractors = [correct+1, correct-1, correct+2]
+    choices = [correct]+distractors
+    rng.shuffle(choices)
     payload = {"type":"stats_hist","data":data}
-    return Question("Statistiques", difficulty, stem, ch, ch.index(correct), expl, plot=True, plot_payload=payload)
+    return Question("Statistiques", difficulty, stem, [str(round(c,2)) for c in choices], choices.index(correct), "On utilise les définitions : moyenne, médiane, étendue.", plot=True, plot_payload=payload)
 
-def _gen_proba(difficulty: str, rng: random.Random) -> Question:
-    total = rng.randint(6, 12)
-    fav = rng.randint(1, total-1)
-    if difficulty == "Facile":
-        stem = f"On lance une expérience à {total} issues équiprobables, dont {fav} favorables. Quelle est la probabilité ?"
-        correct = f"{fav}/{total}"
-        distractors = [f"{total}/{fav}", f"{fav}/{fav+1}", f"{total-fav}/{total}"]
-        expl = f"P(A)={fav}/{total} car {fav} issues favorables."
-    elif difficulty == "Moyen":
-        stem = f"Un dé équilibré à 6 faces. Quelle est la probabilité d’obtenir un multiple de 3 ?"
-        correct = "2/6"
-        distractors = ["1/6","3/6","4/6"]
-        expl = "Multiples de 3 entre 1 et 6 : {3,6}, donc 2/6."
-    else:  # Difficile
-        stem = "On tire une carte dans un jeu de 52 cartes. Probabilité d’obtenir un cœur ou un carreau ?"
-        correct = "26/52"
-        distractors = ["13/52","39/52","1/4"]
-        expl = "Il y a 26 cartes rouges (cœurs+carreaux) sur 52, donc 26/52."
-    ch = [correct] + distractors
-    rng.shuffle(ch)
-    return Question("Probabilités", difficulty, stem, ch, ch.index(correct), expl)
+def _gen_probabilites(difficulty, rng):
+    n = 6
+    if difficulty=="Facile":
+        stem = "On lance un dé équilibré. Quelle est la probabilité d'obtenir un 6 ?"
+        correct = 1/n
+        distractors = [1/2,1/3,1/4]
+    elif difficulty=="Moyen":
+        stem = "On lance un dé équilibré. Quelle est la probabilité d'obtenir un nombre pair ?"
+        correct = 3/n
+        distractors = [2/n,4/n,5/n]
+    else:
+        stem = "On lance deux dés équilibrés. Quelle est la probabilité d'obtenir une somme égale à 7 ?"
+        correct = 6/36
+        distractors = [1/6,1/12,1/18]
+    choices = [correct]+distractors
+    rng.shuffle(choices)
+    return Question("Probabilités", difficulty, stem, [str(round(c,2)) for c in choices], choices.index(correct), "On compte les issues favorables et on divise par le nombre total de cas.")
 
-# =========================
-# Générateurs enregistrés
-# =========================
-GENS = {
-    "Calcul numérique et algébrique": _gen_calc_num,
+# ===============================
+# Dispatcher
+# ===============================
+GENERATORS = {
+    "Calcul numérique et algébrique": _gen_calcul,
     "Proportions et pourcentages": _gen_proportions,
     "Évolutions et variations": _gen_evolutions,
     "Fonctions et représentations": _gen_fonctions,
     "Statistiques": _gen_stats,
-    "Probabilités": _gen_proba,
+    "Probabilités": _gen_probabilites,
 }
 
-# =========================
-# Génération des séries
-# =========================
-def generate(theme: str, difficulty: str, rng: random.Random) -> Question:
-    q = GENS[theme](difficulty, rng)
-    ok, _ = validate(q)
-    if not ok:
-        for _ in range(3):
-            q = GENS[theme](difficulty, rng)
-            ok, _ = validate(q)
-            if ok:
-                break
-    return q
-
-def generate_set(theme: Optional[str], difficulty: str, n: int, seed: int) -> List[Question]:
+def generate_set(theme, difficulty, n, seed=None):
     rng = random.Random(seed)
-    themes = [theme] if theme and theme != "Auto" else THEMES
-    qs = []
-    while len(qs) < n:
-        t = rng.choice(themes)
-        q = generate(t, difficulty, rng)
-        if not any(_norm(q.stem) == _norm(existing.stem) for existing in qs):
-            qs.append(q)
-    return qs[:n]
+    out = []
+    themes = THEMES if theme=="Auto" else [theme]
+    while len(out)<n:
+        th = rng.choice(themes)
+        q = GENERATORS[th](difficulty, rng)
+        if q.stem not in [qq.stem for qq in out]:
+            out.append(q)
+    return out
 
-def generate_exam(seed: int) -> List[Question]:
+def generate_exam(seed=None):
     rng = random.Random(seed)
-    qs = []
-    counts = {t:0 for t in THEMES}
-    while len(qs) < 12:
-        t = rng.choice(THEMES)
-        if counts[t] >= 3:
-            continue
-        diff = rng.choice(Difficulty)
-        q = generate(t, diff, rng)
-        if not any(_norm(q.stem) == _norm(existing.stem) for existing in qs):
-            qs.append(q)
-            counts[t] += 1
-    return qs[:12]
-
-def to_dict(q: Question) -> Dict:
-    return asdict(q)
+    out = []
+    for th in THEMES:
+        q = GENERATORS[th](rng.choice(Difficulty), rng)
+        out.append(q)
+    # compléter à 12
+    while len(out)<12:
+        th = rng.choice(THEMES)
+        q = GENERATORS[th](rng.choice(Difficulty), rng)
+        if q.stem not in [qq.stem for qq in out]:
+            out.append(q)
+    rng.shuffle(out)
+    return out
