@@ -160,7 +160,7 @@ def _gen_fonctions(difficulty: str, rng: random.Random) -> Question:
         expl = f"Coefficient directeur a = (y2-y1)/(x2-x1) = {round(a,2)}, donc y={round(a,2)}x+{round(b,2)}."
     ch = [correct] + distractors
     rng.shuffle(ch)
-    payload = {"type":"affine","a":a,"b":b,"points":[] } if difficulty!="Facile" else {"type":"affine","a":a,"b":b,"points":[(x0,f_x0)]}
+    payload = {"type":"affine","a":a,"b":b,"points":[] }
     return Question("Fonctions et représentations", difficulty, stem, ch, ch.index(correct), expl, plot=True, plot_payload=payload)
 
 def _gen_stats(difficulty: str, rng: random.Random) -> Question:
