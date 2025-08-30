@@ -41,12 +41,12 @@ def _plot(qdict):
         ys = a * xs + b
         plt.axhline(0, color="black", linewidth=0.5)
         plt.axvline(0, color="black", linewidth=0.5)
-        plt.plot(xs, ys)
-        st.pyplot(plt.gcf(), clear_figure=True)
-    elif payload.get("type") == "stats_hist":
-        data = payload["data"]
-        plt.hist(data, bins="auto")
-        plt.title("Histogramme")
+        plt.plot(xs, ys, label="droite f")
+        if "points" in payload:
+            pts = payload["points"]
+            for (px, py) in pts:
+                plt.scatter(px, py, color="red")
+                plt.text(px, py, f"({px},{py})", fontsize=8, ha="left")
         st.pyplot(plt.gcf(), clear_figure=True)
 
 def _save_results(user_id: str, records: list):
@@ -64,7 +64,7 @@ def _save_results(user_id: str, records: list):
     return path
 
 # ===============================
-# PAGE : MENU
+# MENU
 # ===============================
 if st.session_state["page"] == "menu":
     st.title("QCM Première — Entraînement Bac 2026")
@@ -83,21 +83,23 @@ if st.session_state["page"] == "menu":
         theme, difficulty, n_questions = None, None, 12
 
     if st.button("Commencer"):
-        seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
-        if mode == "Examen (12 questions)":
-            qdicts = [to_dict(q) for q in generate_exam(seed)]
+        if mode == "Examen (12 questions)" and not user_id:
+            st.error("⚠️ Vous devez saisir un identifiant avant de commencer l'examen.")
         else:
-            qdicts = [to_dict(q) for q in generate_set(theme, difficulty, n_questions, seed)]
-        # Stockage en session
-        st.session_state["questions"] = qdicts
-        st.session_state["answers"] = {}
-        st.session_state["validated"] = {}
-        st.session_state["scores"] = {}
-        st.session_state["page"] = "quiz"
-        st.rerun()
+            seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
+            if mode == "Examen (12 questions)":
+                qdicts = [to_dict(q) for q in generate_exam(seed)]
+            else:
+                qdicts = [to_dict(q) for q in generate_set(theme, difficulty, n_questions, seed)]
+            st.session_state["questions"] = qdicts
+            st.session_state["answers"] = {}
+            st.session_state["validated"] = {}
+            st.session_state["scores"] = {}
+            st.session_state["page"] = "quiz"
+            st.rerun()
 
 # ===============================
-# PAGE : QUIZ
+# QUIZ
 # ===============================
 elif st.session_state["page"] == "quiz":
     qdicts = st.session_state["questions"]
@@ -105,29 +107,20 @@ elif st.session_state["page"] == "quiz":
     user_id = st.session_state["user_id"]
 
     st.header(f"Mode {mode}")
-    st.subheader("Questions")
-
     for i, q in enumerate(qdicts, start=1):
         validated = st.session_state["validated"].get(i, False)
-
         with st.expander(f"Q{i}. {q['theme']} — {q['difficulty']}", expanded=True):
             st.markdown(f"**Énoncé :** {q['stem']}")
             _plot(q)
-
-            choice = st.radio(
-                "Votre réponse :",
-                options=list(range(4)),
-                format_func=lambda idx: f"{['A','B','C','D'][idx]}. {q['choices'][idx]}",
-                index=st.session_state["answers"].get(i, 0) if i in st.session_state["answers"] else 0,
-                key=f"radio_{i}"
-            )
-
+            choice = st.radio("Votre réponse :", options=list(range(4)),
+                              format_func=lambda idx: f"{['A','B','C','D'][idx]}. {q['choices'][idx]}",
+                              index=st.session_state["answers"].get(i, 0) if i in st.session_state["answers"] else 0,
+                              key=f"radio_{i}")
             if st.button("Valider ma réponse", key=f"btn_{i}"):
                 st.session_state["validated"][i] = True
                 st.session_state["answers"][i] = choice
                 st.session_state["scores"][i] = int(choice == q["correct_index"])
                 st.rerun()
-
             if validated:
                 user_choice = st.session_state["answers"][i]
                 st.caption(f"Bonne réponse : {['A','B','C','D'][q['correct_index']]}")
@@ -137,18 +130,15 @@ elif st.session_state["page"] == "quiz":
                 else:
                     st.error("❌ Incorrect")
 
-    # Score courant
     if st.session_state["scores"]:
         score = sum(st.session_state["scores"].values())
         total = len(st.session_state["scores"])
         st.success(f"Score : {score}/{total} ({round(100*score/total)}%)")
 
-    # Passage à la fin en mode examen
     if mode == "Examen (12 questions)" and len(st.session_state["validated"]) == len(qdicts):
         st.session_state["page"] = "end"
         st.rerun()
 
-    # Bouton pour quitter/recommencer
     if st.button("🔄 Nouvel essai"):
         for key in ["questions", "validated", "answers", "scores"]:
             st.session_state[key] = {}
@@ -156,7 +146,7 @@ elif st.session_state["page"] == "quiz":
         st.rerun()
 
 # ===============================
-# PAGE : END (corrigé final exam)
+# END (corrigé complet examen)
 # ===============================
 elif st.session_state["page"] == "end":
     st.header("📘 Corrigé complet — Mode Examen")
