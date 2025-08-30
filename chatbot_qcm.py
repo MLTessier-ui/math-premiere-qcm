@@ -11,16 +11,21 @@ st.set_page_config(page_title="QCM Première - Entraînement Bac", layout="wide"
 st.title("QCM Première — Entraînement Bac 2026")
 
 # ===============================
-# Sidebar
+# Choix du mode
 # ===============================
+mode = st.radio("Choisissez le mode :", ["Entraînement", "Examen (12 questions)"])
+
 with st.sidebar:
     st.header("Paramètres")
     user_id = st.text_input("Identifiant élève", help="Ex: prenom.nom ou numéro")
-    theme = st.selectbox("Thème", options=["Auto"] + THEMES)
-    difficulty = st.selectbox("Difficulté", options=Difficulty, index=1)
-    n_questions = st.slider("Nombre de questions", 5, 10, 5)
-    exam_mode = st.toggle("Mode examen (12 questions)")
-    start_quiz = st.button("Commencer l’entraînement")
+    if mode == "Entraînement":
+        theme = st.selectbox("Thème", options=["Auto"] + THEMES)
+        difficulty = st.selectbox("Difficulté", options=Difficulty, index=1)
+        n_questions = st.slider("Nombre de questions", 5, 10, 5)
+    else:
+        theme, difficulty, n_questions = None, None, 12
+
+    start_quiz = st.button("Commencer")
 
 # ===============================
 # Helpers
@@ -59,13 +64,12 @@ def _save_results(user_id: str, records: list):
     return path
 
 # ===============================
-# Génération quiz (unique)
+# Génération quiz
 # ===============================
-if start_quiz or exam_mode:
-    # Génération si pas déjà faite
-    if "questions" not in st.session_state:
+if start_quiz:
+    if "questions" not in st.session_state or st.session_state.get("last_mode") != mode:
         seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
-        if exam_mode:
+        if mode == "Examen (12 questions)":
             qdicts = [to_dict(q) for q in generate_exam(seed)]
         else:
             qdicts = [to_dict(q) for q in generate_set(theme, difficulty, n_questions, seed)]
@@ -73,6 +77,7 @@ if start_quiz or exam_mode:
         st.session_state["validated"] = {}
         st.session_state["answers"] = {}
         st.session_state["scores"] = {}
+        st.session_state["last_mode"] = mode
 
     qdicts = st.session_state["questions"]
 
@@ -88,7 +93,6 @@ if start_quiz or exam_mode:
             st.markdown(f"**Énoncé :** {q['stem']}")
             _plot(q)
 
-            # choix temporaire (pas en session_state direct)
             choice = st.radio(
                 "Votre réponse :",
                 options=list(range(4)),
@@ -122,7 +126,7 @@ if start_quiz or exam_mode:
     # ===============================
     # Corrigé final (examen)
     # ===============================
-    if exam_mode and len(st.session_state["validated"]) == len(qdicts):
+    if mode == "Examen (12 questions)" and len(st.session_state["validated"]) == len(qdicts):
         st.subheader("📘 Corrigé complet")
         records = []
         for i, q in enumerate(qdicts, start=1):
@@ -141,3 +145,12 @@ if start_quiz or exam_mode:
         path = _save_results(user_id, records)
         if path:
             st.caption(f"Résultats sauvegardés dans : `{path}`")
+
+    # ===============================
+    # Bouton "Nouvel essai"
+    # ===============================
+    if st.button("🔄 Nouvel essai"):
+        for key in ["questions", "validated", "answers", "scores", "last_mode"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
