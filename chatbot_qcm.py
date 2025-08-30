@@ -5,27 +5,27 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
-from qcm_engine import THEMES, Difficulty, generate_set, generate_exam, to_dict, validate
+from qcm_engine import THEMES, Difficulty, generate_set, generate_exam, to_dict
 
 st.set_page_config(page_title="QCM Première - Entraînement Bac", layout="wide")
-st.title("QCM Première — Entraînement Bac 2026")
 
 # ===============================
-# Choix du mode
+# Initialisation état
 # ===============================
-mode = st.radio("Choisissez le mode :", ["Entraînement", "Examen (12 questions)"])
-
-with st.sidebar:
-    st.header("Paramètres")
-    user_id = st.text_input("Identifiant élève", help="Ex: prenom.nom ou numéro")
-    if mode == "Entraînement":
-        theme = st.selectbox("Thème", options=["Auto"] + THEMES)
-        difficulty = st.selectbox("Difficulté", options=Difficulty, index=1)
-        n_questions = st.slider("Nombre de questions", 5, 10, 5)
-    else:
-        theme, difficulty, n_questions = None, None, 12
-
-    start_quiz = st.button("Commencer")
+if "page" not in st.session_state:
+    st.session_state["page"] = "menu"
+if "questions" not in st.session_state:
+    st.session_state["questions"] = []
+if "answers" not in st.session_state:
+    st.session_state["answers"] = {}
+if "validated" not in st.session_state:
+    st.session_state["validated"] = {}
+if "scores" not in st.session_state:
+    st.session_state["scores"] = {}
+if "mode" not in st.session_state:
+    st.session_state["mode"] = "Entraînement"
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = ""
 
 # ===============================
 # Helpers
@@ -64,26 +64,47 @@ def _save_results(user_id: str, records: list):
     return path
 
 # ===============================
-# Génération quiz
+# PAGE : MENU
 # ===============================
-if start_quiz:
-    if "questions" not in st.session_state or st.session_state.get("last_mode") != mode:
+if st.session_state["page"] == "menu":
+    st.title("QCM Première — Entraînement Bac 2026")
+
+    mode = st.radio("Choisissez le mode :", ["Entraînement", "Examen (12 questions)"])
+    st.session_state["mode"] = mode
+
+    user_id = st.text_input("Identifiant élève", value=st.session_state["user_id"])
+    st.session_state["user_id"] = user_id
+
+    if mode == "Entraînement":
+        theme = st.selectbox("Thème", options=["Auto"] + THEMES)
+        difficulty = st.selectbox("Difficulté", options=Difficulty, index=1)
+        n_questions = st.slider("Nombre de questions", 5, 10, 5)
+    else:
+        theme, difficulty, n_questions = None, None, 12
+
+    if st.button("Commencer"):
         seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
         if mode == "Examen (12 questions)":
             qdicts = [to_dict(q) for q in generate_exam(seed)]
         else:
             qdicts = [to_dict(q) for q in generate_set(theme, difficulty, n_questions, seed)]
+        # Stockage en session
         st.session_state["questions"] = qdicts
-        st.session_state["validated"] = {}
         st.session_state["answers"] = {}
+        st.session_state["validated"] = {}
         st.session_state["scores"] = {}
-        st.session_state["last_mode"] = mode
+        st.session_state["page"] = "quiz"
+        st.rerun()
 
+# ===============================
+# PAGE : QUIZ
+# ===============================
+elif st.session_state["page"] == "quiz":
     qdicts = st.session_state["questions"]
+    mode = st.session_state["mode"]
+    user_id = st.session_state["user_id"]
 
-    # ===============================
-    # Affichage questions
-    # ===============================
+    st.header(f"Mode {mode}")
     st.subheader("Questions")
 
     for i, q in enumerate(qdicts, start=1):
@@ -105,6 +126,7 @@ if start_quiz:
                 st.session_state["validated"][i] = True
                 st.session_state["answers"][i] = choice
                 st.session_state["scores"][i] = int(choice == q["correct_index"])
+                st.rerun()
 
             if validated:
                 user_choice = st.session_state["answers"][i]
@@ -115,42 +137,52 @@ if start_quiz:
                 else:
                     st.error("❌ Incorrect")
 
-    # ===============================
     # Score courant
-    # ===============================
     if st.session_state["scores"]:
         score = sum(st.session_state["scores"].values())
         total = len(st.session_state["scores"])
         st.success(f"Score : {score}/{total} ({round(100*score/total)}%)")
 
-    # ===============================
-    # Corrigé final (examen)
-    # ===============================
+    # Passage à la fin en mode examen
     if mode == "Examen (12 questions)" and len(st.session_state["validated"]) == len(qdicts):
-        st.subheader("📘 Corrigé complet")
-        records = []
-        for i, q in enumerate(qdicts, start=1):
-            st.markdown(f"**Q{i}. {q['stem']}**")
-            st.caption(f"Bonne réponse : {q['choices'][q['correct_index']]}")
-            st.write(q['explanation'])
-            records.append({
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "user_id": user_id,
-                "question_idx": i,
-                "theme": q["theme"],
-                "difficulty": q["difficulty"],
-                "is_correct": st.session_state['scores'].get(i, 0)
-            })
+        st.session_state["page"] = "end"
+        st.rerun()
 
-        path = _save_results(user_id, records)
-        if path:
-            st.caption(f"Résultats sauvegardés dans : `{path}`")
-
-    # ===============================
-    # Bouton "Nouvel essai"
-    # ===============================
+    # Bouton pour quitter/recommencer
     if st.button("🔄 Nouvel essai"):
-        for key in ["questions", "validated", "answers", "scores", "last_mode"]:
-            if key in st.session_state:
-                del st.session_state[key]
+        for key in ["questions", "validated", "answers", "scores"]:
+            st.session_state[key] = {}
+        st.session_state["page"] = "menu"
+        st.rerun()
+
+# ===============================
+# PAGE : END (corrigé final exam)
+# ===============================
+elif st.session_state["page"] == "end":
+    st.header("📘 Corrigé complet — Mode Examen")
+    qdicts = st.session_state["questions"]
+    user_id = st.session_state["user_id"]
+
+    records = []
+    for i, q in enumerate(qdicts, start=1):
+        st.markdown(f"**Q{i}. {q['stem']}**")
+        st.caption(f"Bonne réponse : {q['choices'][q['correct_index']]}")
+        st.write(q['explanation'])
+        records.append({
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "user_id": user_id,
+            "question_idx": i,
+            "theme": q["theme"],
+            "difficulty": q["difficulty"],
+            "is_correct": st.session_state['scores'].get(i, 0)
+        })
+
+    path = _save_results(user_id, records)
+    if path:
+        st.caption(f"Résultats sauvegardés dans : `{path}`")
+
+    if st.button("Retour au menu"):
+        for key in ["questions", "validated", "answers", "scores"]:
+            st.session_state[key] = {}
+        st.session_state["page"] = "menu"
         st.rerun()
