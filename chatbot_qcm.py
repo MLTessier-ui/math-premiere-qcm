@@ -23,17 +23,7 @@ with st.sidebar:
     start_quiz = st.button("Commencer l’entraînement")
 
 # ===============================
-# Cache génération
-# ===============================
-@st.cache_data(show_spinner=False)
-def _generate_cached(theme, difficulty, n, seed, exam):
-    if exam:
-        return [to_dict(q) for q in generate_exam(seed)]
-    else:
-        return [to_dict(q) for q in generate_set(theme, difficulty, n, seed)]
-
-# ===============================
-# Plot helper
+# Helpers
 # ===============================
 def _plot(qdict):
     if not qdict.get("plot"):
@@ -47,8 +37,6 @@ def _plot(qdict):
         plt.axhline(0, color="black", linewidth=0.5)
         plt.axvline(0, color="black", linewidth=0.5)
         plt.plot(xs, ys)
-        for x0, y0 in payload.get("points", []):
-            plt.scatter([x0], [y0], color="red")
         st.pyplot(plt.gcf(), clear_figure=True)
     elif payload.get("type") == "stats_hist":
         data = payload["data"]
@@ -56,9 +44,6 @@ def _plot(qdict):
         plt.title("Histogramme")
         st.pyplot(plt.gcf(), clear_figure=True)
 
-# ===============================
-# Sauvegarde résultats (exam only)
-# ===============================
 def _save_results(user_id: str, records: list):
     if not user_id or not records:
         return
@@ -74,30 +59,36 @@ def _save_results(user_id: str, records: list):
     return path
 
 # ===============================
-# Quiz
+# Génération quiz (unique)
 # ===============================
 if start_quiz or exam_mode:
-    seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
-    qdicts = _generate_cached(theme, difficulty, n_questions, seed, exam_mode)
-
-    st.subheader("Questions")
-
-    if "validated" not in st.session_state:
+    # Génération si pas déjà faite
+    if "questions" not in st.session_state:
+        seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
+        if exam_mode:
+            qdicts = [to_dict(q) for q in generate_exam(seed)]
+        else:
+            qdicts = [to_dict(q) for q in generate_set(theme, difficulty, n_questions, seed)]
+        st.session_state["questions"] = qdicts
         st.session_state["validated"] = {}
-    if "answers" not in st.session_state:
         st.session_state["answers"] = {}
-    if "scores" not in st.session_state:
         st.session_state["scores"] = {}
 
+    qdicts = st.session_state["questions"]
+
+    # ===============================
+    # Affichage questions
+    # ===============================
+    st.subheader("Questions")
+
     for i, q in enumerate(qdicts, start=1):
-        ok, issues = validate(type("Q", (), q))
         validated = st.session_state["validated"].get(i, False)
 
         with st.expander(f"Q{i}. {q['theme']} — {q['difficulty']}", expanded=True):
             st.markdown(f"**Énoncé :** {q['stem']}")
             _plot(q)
 
-            # radio en variable locale (pas lié directement à session_state)
+            # choix temporaire (pas en session_state direct)
             choice = st.radio(
                 "Votre réponse :",
                 options=list(range(4)),
@@ -106,33 +97,30 @@ if start_quiz or exam_mode:
                 key=f"radio_{i}"
             )
 
-            # bouton valider
             if st.button("Valider ma réponse", key=f"btn_{i}"):
                 st.session_state["validated"][i] = True
                 st.session_state["answers"][i] = choice
-                is_correct = int(choice == q["correct_index"])
-                st.session_state["scores"][i] = is_correct
+                st.session_state["scores"][i] = int(choice == q["correct_index"])
 
-            # affichage correction uniquement si validée
             if validated:
                 user_choice = st.session_state["answers"][i]
                 st.caption(f"Bonne réponse : {['A','B','C','D'][q['correct_index']]}")
                 st.write(f"**Explication :** {q['explanation']}")
-                if not ok:
-                    st.warning("Validation auto : " + "; ".join(issues))
                 if user_choice == q["correct_index"]:
                     st.success("✅ Correct")
                 else:
                     st.error("❌ Incorrect")
 
+    # ===============================
     # Score courant
+    # ===============================
     if st.session_state["scores"]:
         score = sum(st.session_state["scores"].values())
         total = len(st.session_state["scores"])
         st.success(f"Score : {score}/{total} ({round(100*score/total)}%)")
 
     # ===============================
-    # Corrigé final (examen seulement)
+    # Corrigé final (examen)
     # ===============================
     if exam_mode and len(st.session_state["validated"]) == len(qdicts):
         st.subheader("📘 Corrigé complet")
@@ -144,7 +132,6 @@ if start_quiz or exam_mode:
             records.append({
                 "timestamp": datetime.now().isoformat(timespec="seconds"),
                 "user_id": user_id,
-                "seed": seed,
                 "question_idx": i,
                 "theme": q["theme"],
                 "difficulty": q["difficulty"],
