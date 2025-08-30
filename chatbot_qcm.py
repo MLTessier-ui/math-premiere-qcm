@@ -67,4 +67,83 @@ def _save_results(user_id: str, records: list):
     df_new = pd.DataFrame(records)
     if os.path.exists(path):
         df = pd.read_csv(path)
-        df = pd.concat([df, df_ne_]()
+        df = pd.concat([df, df_new], ignore_index=True)
+    else:
+        df = df_new
+    df.to_csv(path, index=False)
+    return path
+
+# ===============================
+# Quiz
+# ===============================
+if start_quiz or exam_mode:
+    seed = int(hash(user_id) % 10_000) if user_id else random.randint(0, 10_000)
+    qdicts = _generate_cached(theme, difficulty, n_questions, seed, exam_mode)
+
+    st.subheader("Questions")
+
+    # init states
+    for i in range(1, len(qdicts)+1):
+        if f"validated_{i}" not in st.session_state:
+            st.session_state[f"validated_{i}"] = False
+        if f"choice_{i}" not in st.session_state:
+            st.session_state[f"choice_{i}"] = None
+
+    scores = []
+    records = []
+
+    for i, q in enumerate(qdicts, start=1):
+        ok, issues = validate(type("Q", (), q))
+        choice_key = f"choice_{i}"
+        validated_key = f"validated_{i}"
+
+        with st.expander(f"Q{i}. {q['theme']} — {q['difficulty']}", expanded=True):
+            st.markdown(f"**Énoncé :** {q['stem']}")
+            _plot(q)
+
+            # choix
+            st.radio(
+                "Votre réponse :",
+                options=list(range(4)),
+                format_func=lambda idx: f"{['A','B','C','D'][idx]}. {q['choices'][idx]}",
+                key=choice_key
+            )
+
+            # bouton
+            if st.button("Valider ma réponse", key=f"btn_{i}"):
+                st.session_state[validated_key] = True
+
+            # affichage correction uniquement si validée
+            if st.session_state[validated_key]:
+                choice = st.session_state[choice_key]
+                is_correct = int(choice == q["correct_index"])
+                scores.append(is_correct)
+
+                st.caption(f"Bonne réponse : {['A','B','C','D'][q['correct_index']]}")
+                st.write(f"**Explication :** {q['explanation']}")
+
+                if not ok:
+                    st.warning("Validation automatique : " + "; ".join(issues))
+
+                if exam_mode:  # on n’enregistre que si mode examen
+                    records.append({
+                        "timestamp": datetime.now().isoformat(timespec="seconds"),
+                        "user_id": user_id,
+                        "seed": seed,
+                        "question_idx": i,
+                        "theme": q["theme"],
+                        "difficulty": q["difficulty"],
+                        "is_correct": is_correct
+                    })
+
+    # score
+    if scores:
+        score = sum(scores)
+        total = len(scores)
+        st.success(f"Score : {score}/{total} ({round(100*score/total)}%)")
+
+    # sauvegarde uniquement en mode examen
+    if exam_mode and records:
+        path = _save_results(user_id, records)
+        if path:
+            st.caption(f"Résultats sauvegardés dans : `{path}`")
