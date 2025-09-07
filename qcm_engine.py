@@ -101,6 +101,7 @@ def gen_stats(difficulty="Moyen"):
     return Question("Statistiques et probabilités", stem, choices, correct_index, explanation, difficulty)
 
 def gen_second_deg(difficulty="Moyen"):
+    """Discriminant d’un polynôme du second degré"""
     a = random.choice([1, -1, 2])
     b = random.randint(-4, 4)
     c = random.randint(-3, 3)
@@ -113,4 +114,66 @@ def gen_second_deg(difficulty="Moyen"):
     explanation = f"Δ = b² - 4ac = {b}² - 4×{a}×{c} = {delta}."
     return Question("Second degré", stem, choices, correct_index, explanation, difficulty)
 
+def gen_derivation(difficulty="Moyen"):
+    """Dérivation simple de monômes"""
+    coeff = random.choice([1, 2, 3])
+    exp = random.choice([2, 3, 4])
+    stem = f"Quelle est la dérivée de f(x) = {coeff}x^{exp} ?"
+    correct = f"{coeff*exp}x^{exp-1}"
+    wrong = [f"{coeff}x^{exp-1}", f"{coeff*exp}x^{exp}", f"{exp}x^{coeff-1}"]
+    choices = [correct] + wrong
+    random.shuffle(choices)
+    correct_index = choices.index(correct)
+    explanation = f"On applique (x^n)' = n×x^(n-1). Ici ({coeff}x^{exp})' = {coeff*exp}x^{exp-1}."
+    return Question("Dérivation", stem, choices, correct_index, explanation, difficulty)
 
+def gen_geo(difficulty="Moyen"):
+    """Distance entre deux points en géométrie analytique"""
+    xA, yA = random.randint(-3, 3), random.randint(-3, 3)
+    xB, yB = random.randint(-3, 3), random.randint(-3, 3)
+    stem = f"Dans un repère, A({xA},{yA}) et B({xB},{yB}). Quelle est la distance AB ?"
+    correct = round(((xB-xA)**2 + (yB-yA)**2)**0.5, 2)
+    wrong = [abs(xB-xA)+abs(yB-yA), (xB-xA)**2 + (yB-yA)**2, abs(xB-xA-yB+yA)]
+    choices = [str(correct)] + [str(w) for w in wrong]
+    random.shuffle(choices)
+    correct_index = choices.index(str(correct))
+    explanation = f"AB = √((xB-xA)² + (yB-yA)²) = √(({xB}-{xA})² + ({yB}-{yA})²) = {correct}."
+    return Question("Géométrie analytique", stem, choices, correct_index, explanation, difficulty)
+
+# ===============================
+# Générateurs globaux
+# ===============================
+def generate_question(theme, difficulty="Moyen"):
+    if theme == "Suites arithmétiques et géométriques":
+        return gen_suite_geo(difficulty)
+    elif theme == "Fonctions et représentations graphiques":
+        return gen_fonction_affine(difficulty)
+    elif theme == "Statistiques et probabilités":
+        return gen_stats(difficulty)
+    elif theme == "Second degré":
+        return gen_second_deg(difficulty)
+    elif theme == "Dérivation":
+        return gen_derivation(difficulty)
+    elif theme == "Géométrie analytique":
+        return gen_geo(difficulty)
+    else:
+        return gen_stats(difficulty)
+
+def generate_set(theme, difficulty, n, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    qs = []
+    for _ in range(n):
+        t = theme if theme != "Auto" else random.choice(THEMES)
+        qs.append(generate_question(t, difficulty))
+    return qs
+
+def generate_exam(seed=None):
+    if seed is not None:
+        random.seed(seed)
+    qs = []
+    for t in THEMES:
+        for _ in range(2):  # 2 questions par thème
+            qs.append(generate_question(t, "Moyen"))
+    random.shuffle(qs)
+    return qs[:12]
