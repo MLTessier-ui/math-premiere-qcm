@@ -105,7 +105,8 @@ if st.session_state.mode in ["Quiz", "Examen en cours"]:
             })
 
             st.session_state.current_index += 1
-            st.experimental_rerun()
+            st.rerun()   # ✅ correction ici
+
     else:
         st.success(f"Quiz terminé ! Score : {st.session_state.score}/{len(questions)}")
 
