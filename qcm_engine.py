@@ -1,5 +1,31 @@
+# -*- coding: utf-8 -*-
+import random
+from enum import Enum
+from fractions import Fraction
+
 # ===============================
-# Générateurs Numérique
+# Classe et constantes
+# ===============================
+
+class Difficulty(str, Enum):
+    Facile = "Facile"
+    Moyen = "Moyen"
+    Difficile = "Difficile"
+
+class Question:
+    def __init__(self, theme, stem, choices, correct_index, explanation,
+                 difficulty="Moyen", plot=False, plot_payload=None):
+        self.theme = theme
+        self.stem = stem
+        self.choices = choices
+        self.correct_index = correct_index
+        self.explanation = explanation
+        self.difficulty = difficulty
+        self.plot = plot
+        self.plot_payload = plot_payload or {}
+
+# ===============================
+# Générateurs : Numérique
 # ===============================
 
 def gen_fraction_addition(difficulty="Moyen"):
@@ -31,7 +57,7 @@ def gen_percentage_increase(difficulty="Moyen"):
     return Question("Numérique", stem, choices, correct_index, explanation, difficulty)
 
 # ===============================
-# Générateurs Fonctions
+# Générateurs : Fonctions
 # ===============================
 
 def gen_fonction_image(difficulty="Moyen"):
@@ -52,7 +78,7 @@ def gen_fonction_slope(difficulty="Moyen"):
     y1, y2 = a*x1+b, a*x2+b
     stem = f"On considère une droite passant par A({x1},{y1}) et B({x2},{y2}). Quel est son coefficient directeur ?"
     correct = (y2-y1)/(x2-x1)
-    wrong = [y2-y1, (x2-x1)/(y2-y1), a+ b]
+    wrong = [y2-y1, (x2-x1)/(y2-y1), a+b]
     choices = [str(correct)] + [str(w) for w in wrong]
     random.shuffle(choices)
     correct_index = choices.index(str(correct))
@@ -66,7 +92,7 @@ def gen_fonction_slope(difficulty="Moyen"):
 THEME_GENERATORS = {
     "Numérique": [gen_fraction_addition, gen_percentage_increase],
     "Fonctions": [gen_fonction_image, gen_fonction_slope],
-    # tu ajouteras ici les autres thèmes progressivement
+    # à compléter avec Statistiques, Second degré, Dérivation, Géométrie
 }
 
 # ===============================
@@ -78,5 +104,43 @@ def generate_question(theme, difficulty="Moyen"):
         generator = random.choice(THEME_GENERATORS[theme])
         return generator(difficulty)
     else:
-        # fallback pour compatibilité
-        return gen_stats(difficulty)
+        # fallback simple
+        return gen_fraction_addition(difficulty)
+
+# ===============================
+# Fonctions de compatibilité
+# ===============================
+
+def to_dict(q: Question):
+    return {
+        "theme": q.theme,
+        "stem": q.stem,
+        "choices": q.choices,
+        "correct_index": q.correct_index,
+        "explanation": q.explanation,
+        "difficulty": q.difficulty,
+        "plot": q.plot,
+        "plot_payload": q.plot_payload,
+    }
+
+def generate_set(theme, difficulty, n, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    qs = []
+    for _ in range(n):
+        if theme == "Auto":
+            t = random.choice(list(THEME_GENERATORS.keys()))
+        else:
+            t = theme
+        qs.append(generate_question(t, difficulty))
+    return qs
+
+def generate_exam(seed=None):
+    if seed is not None:
+        random.seed(seed)
+    qs = []
+    for t in THEME_GENERATORS.keys():
+        for _ in range(2):  # 2 questions par thème
+            qs.append(generate_question(t, "Moyen"))
+    random.shuffle(qs)
+    return qs[:12]
