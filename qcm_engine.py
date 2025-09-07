@@ -158,7 +158,7 @@ def gen_stats_dispersion(difficulty="Moyen"):
     return Question("Statistiques", stem, choices, correct_index, explanation, difficulty)
 
 # ===============================
-# Dictionnaire de générateurs actifs
+# Dictionnaire de générateurs
 # ===============================
 
 THEME_GENERATORS = {
@@ -207,14 +207,16 @@ def generate_set(theme, difficulty, n, seed=None):
     return qs
 
 def generate_exam(seed=None):
+    """Génère toujours 12 questions en mode examen"""
     if seed is not None:
         random.seed(seed)
     qs = []
-    for t in THEME_GENERATORS.keys():
-        for _ in range(2):
-            qs.append(generate_question(t, "Moyen"))
+    themes = list(THEME_GENERATORS.keys())
+    for _ in range(12):
+        t = random.choice(themes)
+        qs.append(generate_question(t, "Moyen"))
     random.shuffle(qs)
-    return qs[:12]
+    return qs
 
 # ===============================
 # Compatibilité avec app.py
