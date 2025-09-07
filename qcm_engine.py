@@ -101,10 +101,9 @@ def gen_stats(difficulty="Moyen"):
     return Question("Statistiques et probabilités", stem, choices, correct_index, explanation, difficulty)
 
 def gen_second_deg(difficulty="Moyen"):
-    a = random.choice([1, -1, 2])
-    b = random.randint(-4, 4)
-    c = random.randint(-3, 3)
-    stem = f"On considère f(x) = {a}x² + {b}x + {c}. Quel est le discriminant Δ ?"
     delta = b*b - 4*a*c
     wrong = [b*b + 4*a*c, b-2*a*c, b*b]
-    choices = [str(delta)] + [str(w) for w]()
+    choices = [str(delta)] + [str(w) for w in wrong]
+    random.shuffle(choices)
+    correct_index = choices.index(str(delta))
+
