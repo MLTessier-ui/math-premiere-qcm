@@ -92,7 +92,7 @@ def gen_fonction_slope(difficulty="Moyen"):
 THEME_GENERATORS = {
     "Numérique": [gen_fraction_addition, gen_percentage_increase],
     "Fonctions": [gen_fonction_image, gen_fonction_slope],
-    # à compléter avec Statistiques, Second degré, Dérivation, Géométrie
+    # 👉 tu ajouteras plus tard Statistiques, Second degré, Dérivation, Géométrie
 }
 
 # ===============================
@@ -144,3 +144,8 @@ def generate_exam(seed=None):
             qs.append(generate_question(t, "Moyen"))
     random.shuffle(qs)
     return qs[:12]
+
+# ===============================
+# Compatibilité avec app.py
+# ===============================
+THEMES = list(THEME_GENERATORS.keys())
