@@ -6,8 +6,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 from qcm_engine import THEMES, Difficulty, generate_set, generate_exam, to_dict
+print(">>> Chargement de qcm_engine.py utilisé par Streamlit")
+
 
 st.set_page_config(page_title="QCM Première - Entraînement Bac", layout="wide")
+
 
 # ===============================
 # Initialisation état
