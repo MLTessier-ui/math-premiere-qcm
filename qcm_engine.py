@@ -56,6 +56,18 @@ def gen_percentage_increase(difficulty="Moyen"):
     explanation = f"Une augmentation de {percent}% correspond à multiplier par (1+{percent}/100)."
     return Question("Numérique", stem, choices, correct_index, explanation, difficulty)
 
+def gen_puissances(difficulty="Moyen"):
+    base = random.choice([2,3,5])
+    exp1, exp2 = random.randint(2,4), random.randint(2,4)
+    stem = f"Calculer : {base}^{exp1} × {base}^{exp2}"
+    correct = base**(exp1+exp2)
+    wrong = [base**(exp1*exp2), base**(exp1-exp2), (base**exp1)+(base**exp2)]
+    choices = [str(correct)] + [str(w) for w in wrong]
+    random.shuffle(choices)
+    correct_index = choices.index(str(correct))
+    explanation = f"On additionne les exposants : {base}^{exp1} × {base}^{exp2} = {base}^{exp1+exp2} = {correct}."
+    return Question("Numérique", stem, choices, correct_index, explanation, difficulty)
+
 # ===============================
 # Générateurs : Fonctions
 # ===============================
@@ -85,6 +97,29 @@ def gen_fonction_slope(difficulty="Moyen"):
     explanation = f"Le coefficient directeur est (y2-y1)/(x2-x1) = ({y2}-{y1})/({x2}-{x1}) = {correct}."
     return Question("Fonctions", stem, choices, correct_index, explanation, difficulty)
 
+def gen_identite_remarquable(difficulty="Moyen"):
+    a = random.randint(1, 5)
+    choice = random.choice(["(a+b)²", "(a-b)²", "(a+b)(a-b)"])
+    if choice == "(a+b)²":
+        stem = f"Développer : ({a}+x)²"
+        correct = f"x² + {2*a}x + {a*a}"
+        wrong = [f"x² + {a}x + {a*a}", f"x² + {2*a}x - {a*a}", f"x² - {2*a}x + {a*a}"]
+        explanation = f"(a+b)² = a² + 2ab + b². Ici, ({a}+x)² = x² + 2×{a}×x + {a*a}."
+    elif choice == "(a-b)²":
+        stem = f"Développer : (x-{a})²"
+        correct = f"x² - {2*a}x + {a*a}"
+        wrong = [f"x² + {2*a}x + {a*a}", f"x² - {a}x + {a*a}", f"x² + {a}x - {a*a}"]
+        explanation = f"(a-b)² = a² - 2ab + b². Ici, (x-{a})² = x² - 2×{a}×x + {a*a}."
+    else:
+        stem = f"Développer : (x+{a})(x-{a})"
+        correct = f"x² - {a*a}"
+        wrong = [f"x² + {a*a}", f"x² - {2*a}x + {a*a}", f"x² + {2*a}x + {a*a}"]
+        explanation = f"(a+b)(a-b) = a² - b². Ici, (x+{a})(x-{a}) = x² - {a*a}."
+    choices = [correct] + wrong
+    random.shuffle(choices)
+    correct_index = choices.index(correct)
+    return Question("Fonctions", stem, choices, correct_index, explanation, difficulty)
+
 # ===============================
 # Générateurs : Statistiques
 # ===============================
@@ -111,108 +146,25 @@ def gen_stats_median(difficulty="Moyen"):
     explanation = f"La médiane est la valeur centrale quand on range les données dans l'ordre croissant, ici {correct}."
     return Question("Statistiques", stem, choices, correct_index, explanation, difficulty)
 
-# ===============================
-# Générateurs : Second degré
-# ===============================
-
-def gen_second_deg_discriminant(difficulty="Moyen"):
-    a = random.choice([1, -1, 2])
-    b = random.randint(-4, 4)
-    c = random.randint(-3, 3)
-    stem = f"On considère f(x) = {a}x² + {b}x + {c}. Quel est le discriminant Δ ?"
-    delta = b*b - 4*a*c
-    wrong = [b*b + 4*a*c, b - 2*a*c, b*b]
-    choices = [str(delta)] + [str(w) for w in wrong]
-    random.shuffle(choices)
-    correct_index = choices.index(str(delta))
-    explanation = f"Δ = b² - 4ac = {b}² - 4×{a}×{c} = {delta}."
-    return Question("Second degré", stem, choices, correct_index, explanation, difficulty)
-
-def gen_second_deg_root_count(difficulty="Moyen"):
-    a = random.choice([1, 2])
-    b = random.randint(-5, 5)
-    c = random.randint(-5, 5)
-    delta = b*b - 4*a*c
-    stem = f"On considère f(x) = {a}x² + {b}x + {c}. Combien de racines réelles possède f ?"
-    if delta > 0:
-        correct = "Deux racines réelles distinctes"
-    elif delta == 0:
-        correct = "Une racine réelle double"
-    else:
-        correct = "Aucune racine réelle"
-    wrong = ["Toujours deux racines", "Toujours une seule racine", "Toujours aucune racine"]
-    choices = [correct] + wrong
-    random.shuffle(choices)
-    correct_index = choices.index(correct)
-    explanation = f"On regarde le signe de Δ = {delta}. Δ>0 → 2 racines, Δ=0 → 1 racine double, Δ<0 → pas de racine."
-    return Question("Second degré", stem, choices, correct_index, explanation, difficulty)
-
-# ===============================
-# Générateurs : Dérivation
-# ===============================
-
-def gen_deriv_poly(difficulty="Moyen"):
-    coeff = random.choice([1, 2, 3])
-    exp = random.choice([2, 3, 4])
-    stem = f"Quelle est la dérivée de f(x) = {coeff}x^{exp} ?"
-    correct = f"{coeff*exp}x^{exp-1}"
-    wrong = [f"{coeff}x^{exp-1}", f"{coeff*exp}x^{exp}", f"{exp}x^{coeff-1}"]
-    choices = [correct] + wrong
-    random.shuffle(choices)
-    correct_index = choices.index(correct)
-    explanation = f"On applique (x^n)' = n×x^(n-1). Ici ({coeff}x^{exp})' = {coeff*exp}x^{exp-1}."
-    return Question("Dérivation", stem, choices, correct_index, explanation, difficulty)
-
-def gen_deriv_sum(difficulty="Moyen"):
-    a, b = random.randint(1,3), random.randint(1,3)
-    stem = f"Quelle est la dérivée de f(x) = {a}x^2 + {b}x ?"
-    correct = f"{2*a}x + {b}"
-    wrong = [f"{a}x + {b}", f"{a}x^2 + {b}", f"{2*a}x^2 + {b}"]
-    choices = [correct] + wrong
-    random.shuffle(choices)
-    correct_index = choices.index(correct)
-    explanation = f"La dérivée est (a x²)' + (b x)' = 2ax + b. Ici = {2*a}x + {b}."
-    return Question("Dérivation", stem, choices, correct_index, explanation, difficulty)
-
-# ===============================
-# Générateurs : Géométrie
-# ===============================
-
-def gen_geo_distance(difficulty="Moyen"):
-    xA, yA = random.randint(-3, 3), random.randint(-3, 3)
-    xB, yB = random.randint(-3, 3), random.randint(-3, 3)
-    stem = f"Dans un repère, A({xA},{yA}) et B({xB},{yB}). Quelle est la distance AB ?"
-    correct = round(((xB-xA)**2 + (yB-yA)**2)**0.5, 2)
-    wrong = [abs(xB-xA)+abs(yB-yA), (xB-xA)**2 + (yB-yA)**2, abs(xB-xA-yB+yA)]
+def gen_stats_dispersion(difficulty="Moyen"):
+    data = [random.randint(1,10) for _ in range(5)]
+    stem = f"On a relevé les valeurs suivantes : {data}. Quelle est l'étendue ?"
+    correct = max(data) - min(data)
+    wrong = [max(data), min(data), sum(data)]
     choices = [str(correct)] + [str(w) for w in wrong]
     random.shuffle(choices)
     correct_index = choices.index(str(correct))
-    explanation = f"AB = √((xB-xA)² + (yB-yA)²) = {correct}."
-    return Question("Géométrie", stem, choices, correct_index, explanation, difficulty)
-
-def gen_geo_midpoint(difficulty="Moyen"):
-    xA, yA = random.randint(-5, 5), random.randint(-5, 5)
-    xB, yB = random.randint(-5, 5), random.randint(-5, 5)
-    stem = f"Dans un repère, A({xA},{yA}) et B({xB},{yB}). Quelles sont les coordonnées du milieu M de [AB] ?"
-    correct = ( (xA+xB)/2, (yA+yB)/2 )
-    wrong = [(xA+xB, yA+yB), (xB-xA, yB-yA), ( (xA+xB)/2, (yB-yA)/2 )]
-    choices = [str(correct)] + [str(w) for w in wrong]
-    random.shuffle(choices)
-    correct_index = choices.index(str(correct))
-    explanation = f"M = ((xA+xB)/2 , (yA+yB)/2) = {correct}."
-    return Question("Géométrie", stem, choices, correct_index, explanation, difficulty)
+    explanation = f"L'étendue est max - min = {max(data)} - {min(data)} = {correct}."
+    return Question("Statistiques", stem, choices, correct_index, explanation, difficulty)
 
 # ===============================
-# Dictionnaire de générateurs
+# Dictionnaire de générateurs actifs
 # ===============================
 
 THEME_GENERATORS = {
-    "Numérique": [gen_fraction_addition, gen_percentage_increase],
-    "Fonctions": [gen_fonction_image, gen_fonction_slope],
-    "Statistiques": [gen_stats_mean, gen_stats_median],
-    "Second degré": [gen_second_deg_discriminant, gen_second_deg_root_count],
-    "Dérivation": [gen_deriv_poly, gen_deriv_sum],
-    "Géométrie": [gen_geo_distance, gen_geo_midpoint],
+    "Numérique": [gen_fraction_addition, gen_percentage_increase, gen_puissances],
+    "Fonctions": [gen_fonction_image, gen_fonction_slope, gen_identite_remarquable],
+    "Statistiques": [gen_stats_mean, gen_stats_median, gen_stats_dispersion],
 }
 
 # ===============================
